@@ -1,6 +1,6 @@
 {
   "name": "kartoffel-puffer",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "Kartoffel Puffer – eigener Chromium-Browser auf Electron-Basis",
   "main": "main.js",
@@ -24,11 +24,15 @@
   "build": {
     "appId": "de.kartoffelpuffer.browser",
     "productName": "Kartoffel Puffer",
+    "compression": "maximum",
     "files": [
       "**/*",
       "!*.electron.bak",
       "!*.bak",
       "!start.log",
+      "!test.js",
+      "!docs/**",
+      "!*.md",
       "!node_modules/electron-builder/**",
       "!node_modules/app-builder-lib/**",
       "!node_modules/app-builder-bin/**",
@@ -38,6 +42,16 @@
       "!node_modules/config-file-ts/**",
       "!node_modules/plist/**",
       "!node_modules/lucide/**",
+      "!node_modules/cross-fetch/node-ponyfill.js",
+      "!node_modules/@ghostery/adblocker-electron/**",
+      "!node_modules/better-sqlite3/deps/**",
+      "!node_modules/better-sqlite3/src/**",
+      "!node_modules/better-sqlite3/docs/**",
+      "!node_modules/**/*.md",
+      "!node_modules/**/*.map",
+      "!node_modules/**/test/**",
+      "!node_modules/**/tests/**",
+      "!node_modules/**/__tests__/**",
       "!vercel-updates/**",
       "!dist/**"
     ],
@@ -48,7 +62,10 @@
       }
     ],
     "win": {
-      "target": "nsis",
+      "target": {
+        "target": "nsis",
+        "arch": ["x64"]
+      },
       "icon": "icons/Logo_kartoffelPuffer_lightmode.png"
     },
     "nsis": {
@@ -60,8 +77,9 @@
       "deleteAppDataOnUninstall": false
     },
     "publish": {
-      "provider": "generic",
-      "url": "https://kartoffel-puffer-updates.vercel.app/updates"
+      "provider": "github",
+      "owner": "DEERSTUDIO101",
+      "repo": "kartoffel-puffer"
     }
   }
 }
