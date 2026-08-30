@@ -31,9 +31,21 @@ const defaultSettings = {
   aiAutoCtx:false, aiActiveProvider:'claude',
   speechApiKey:'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',
   tabBarPos:'top', navButtonOrder:[], navButtonHidden:[],
+  features: {
+    devicePreview:    true,
+    aiSidebar:        true,
+    aiWindow:         true,
+    speechToText:     true,
+    eyedropper:       true,
+    fontInspector:    true,
+    vault:            true,
+    extensionManager: true,
+    uiBuilder:        true,
+    browserImport:    true,
+  },
 };
 let cfg = { ...defaultSettings };
-function loadSettings()  { try { const r = localStorage.getItem(SETTINGS_KEY); if(r) cfg = {...defaultSettings,...JSON.parse(r)}; } catch{} }
+function loadSettings()  { try { const r = localStorage.getItem(SETTINGS_KEY); if(r) cfg = {...defaultSettings,...JSON.parse(r)}; } catch{} ensureFeatureDefaults(); }
 function saveSettings()  { localStorage.setItem(SETTINGS_KEY, JSON.stringify(cfg)); }
 
 // ── BOOKMARKS (Daten) ─────────────────────────────────────────────────────────
@@ -112,6 +124,23 @@ function saveHistory(h) {
   _historyCache = h.slice(0, 10000);
   historyIdbClear();
   h.forEach(e => historyIdbAdd(e.url, e.title, e.ts));
+}
+
+// Fehlende Feature-Keys mit true auffüllen (Backwards-Compat für bestehende Installs)
+function ensureFeatureDefaults() {
+  if (!cfg.features || typeof cfg.features !== 'object') cfg.features = {};
+  const def = defaultSettings.features;
+  Object.keys(def).forEach(k => {
+    if (!(k in cfg.features)) cfg.features[k] = def[k];
+  });
+}
+
+// CSS-Klassen auf <body> setzen/entfernen je nach Feature-Status
+function applyFeatureFlags() {
+  ensureFeatureDefaults();
+  Object.entries(cfg.features).forEach(([key, enabled]) => {
+    document.body.classList.toggle(`feat--${key}`, !!enabled);
+  });
 }
 
 // ── SESSION ───────────────────────────────────────────────────────────────────

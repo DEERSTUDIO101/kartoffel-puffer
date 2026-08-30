@@ -521,6 +521,14 @@ body.tabs-right #toolbar,body.tabs-right #bookmarksBar,body.tabs-right #mainArea
 #dvExitBar button{background:rgba(255,159,28,.12);border:1px solid var(--accent);color:var(--accent);
   border-radius:999px;padding:4px 12px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px}
 #dvExitBar button:hover{background:rgba(255,159,28,.22)}
+
+/* ── Feature-Flags: Elemente ausblenden wenn Feature deaktiviert ── */
+body:not(.feat--aiSidebar) #btnAI           { display: none !important; }
+body:not(.feat--aiSidebar) #aiSidebar       { display: none !important; }
+body:not(.feat--aiWindow)  #aiSidebar-detach { display: none !important; }
+body:not(.feat--speechToText) #btnMic       { display: none !important; }
+body:not(.feat--vault)     #btnPasswords    { display: none !important; }
+body:not(.feat--extensionManager) #btnExtensions { display: none !important; }
 </style>
 </head>
 <body>
@@ -1495,6 +1503,7 @@ function applySettings() {
 
   if (typeof applyTabBarPos === 'function') applyTabBarPos(cfg.tabBarPos);
   if (typeof applyNavOrder  === 'function') applyNavOrder();
+  applyFeatureFlags();
 }
 
 function applyBgToBody() {
