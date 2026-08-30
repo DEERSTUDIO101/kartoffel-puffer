@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Kartoffel Puffer – Download</title>
+<style>
+  :root{
+    --bg:#070b10; --panel:#0d1520; --border:rgba(255,255,255,.08);
+    --text:#ecf2f8; --muted:#7c8a9c; --accent:#ff9f1c; --accent2:#4cc9f0;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%}
+  body{
+    background:radial-gradient(circle at top,#132033 0%,#070b10 55%);
+    color:var(--text); font-family:'Segoe UI',system-ui,sans-serif;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    min-height:100vh; padding:2rem; text-align:center;
+  }
+  .logo{font-size:3.2rem; margin-bottom:.2rem}
+  h1{font-size:2.2rem; margin-bottom:.4rem}
+  .tagline{color:var(--muted); font-size:1.05rem; margin-bottom:2.2rem}
+  .card{
+    background:var(--panel); border:1px solid var(--border); border-radius:16px;
+    padding:2.2rem 2.4rem; max-width:480px; width:100%;
+    box-shadow:0 12px 40px rgba(0,0,0,.5);
+  }
+  .version{
+    display:inline-block; font-size:.75rem; color:var(--accent2);
+    background:rgba(76,201,240,.1); border:1px solid rgba(76,201,240,.3);
+    padding:3px 10px; border-radius:999px; margin-bottom:1.2rem;
+  }
+  .dl-btn{
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    background:linear-gradient(135deg,var(--accent),#e0850c);
+    color:#1a0f00; font-weight:700; font-size:1.05rem;
+    padding:14px 24px; border-radius:12px; text-decoration:none;
+    box-shadow:0 6px 20px rgba(255,159,28,.35); transition:transform .15s,box-shadow .15s;
+  }
+  .dl-btn:hover{transform:translateY(-2px); box-shadow:0 10px 28px rgba(255,159,28,.45)}
+  .meta{color:var(--muted); font-size:.8rem; margin-top:.9rem}
+  .features{
+    display:grid; grid-template-columns:1fr 1fr; gap:.6rem 1.2rem;
+    text-align:left; margin-top:1.8rem; font-size:.85rem; color:var(--muted);
+  }
+  .features li{list-style:none; display:flex; align-items:center; gap:8px}
+  .features li::before{content:'✓'; color:var(--accent); font-weight:700}
+  footer{margin-top:2.4rem; color:var(--muted); font-size:.78rem}
+  footer a{color:var(--accent2); text-decoration:none}
+</style>
+</head>
+<body>
+  <div class="logo">🥔</div>
+  <h1>Kartoffel Puffer</h1>
+  <p class="tagline">Dein Browser. Deine Regeln.</p>
+
+  <div class="card">
+    <span class="version" id="verBadge">Lädt Version …</span>
+    <a class="dl-btn" id="dlBtn" href="#" download>
+      <span>⬇</span> Für Windows herunterladen
+    </a>
+    <div class="meta" id="metaInfo">wird geladen …</div>
+
+    <ul class="features">
+      <li>Eingebauter uBlock Origin</li>
+      <li>Verschlüsselter Passwort-Tresor</li>
+      <li>AI-Assistent-Fenster</li>
+      <li>Automatische Updates</li>
+    </ul>
+  </div>
+
+  <footer>Windows kann beim ersten Start „Unbekannter Herausgeber" warnen — auf „Trotzdem ausführen" klicken.<br/>
+  <a href="/updates/">Alle Versionen ansehen</a></footer>
+
+<script>
+// latest.yml enthält: version, files[].url, files[].sha512, files[].size
+fetch('/updates/latest.yml')
+  .then(r => r.text())
+  .then(txt => {
+    const version = (txt.match(/version:\s*(.+)/) || [])[1]?.trim();
+    const fileMatch = txt.match(/-\s*url:\s*(.+)/);
+    const sizeMatch  = txt.match(/size:\s*(\d+)/);
+    const file = fileMatch ? fileMatch[1].trim() : null;
+    if (version) document.getElementById('verBadge').textContent = 'Version ' + version;
+    if (file) {
+      const url = '/updates/' + encodeURIComponent(file);
+      document.getElementById('dlBtn').href = url;
+    }
+    if (sizeMatch) {
+      const mb = (parseInt(sizeMatch[1],10) / (1024*1024)).toFixed(1);
+      document.getElementById('metaInfo').textContent = mb + ' MB · Windows 10/11 · Installer';
+    } else {
+      document.getElementById('metaInfo').textContent = 'Windows 10/11 · Installer';
+    }
+  })
+  .catch(() => {
+    document.getElementById('verBadge').textContent = 'Version unbekannt';
+    document.getElementById('metaInfo').textContent = 'Konnte Versionsinfo nicht laden';
+  });
+</script>
+</body>
+</html>

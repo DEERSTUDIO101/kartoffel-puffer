@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<title>AI Assistent</title>
+<script src="js/lucide.js"></script>
+<style>
+  :root {
+    --bg:           #13181f;
+    --panel:        #1a2030;
+    --border:       #2a3548;
+    --text:         #e2e8f0;
+    --muted:        #64748b;
+    --accent:       #d97706;
+    --accent2:      #4cc9f0;
+    --radius:       10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: -apple-system, 'Segoe UI', sans-serif; font-size: 13px; }
+
+  /* ── Titlebar ── */
+  #titlebar {
+    display: flex; align-items: center; gap: 6px;
+    height: 38px; padding: 0 10px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    -webkit-app-region: drag;   /* electron drag */
+    user-select: none;
+    flex-shrink: 0;
+  }
+  #titlebar .logo { color: var(--accent); font-weight: 700; font-size: 13px; flex: 1; }
+  #titlebar button {
+    -webkit-app-region: no-drag;
+    background: none; border: none; color: var(--muted);
+    cursor: pointer; padding: 4px; border-radius: 5px;
+    display: flex; align-items: center;
+  }
+  #titlebar button:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+  #titlebar #btnClose:hover { background: #c0392b; color: #fff; }
+
+  /* ── Provider tabs ── */
+  #providerTabs {
+    display: flex; gap: 3px; padding: 8px 10px 0;
+    background: var(--panel); flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto; scrollbar-width: none;
+  }
+  #providerTabs::-webkit-scrollbar { display: none; }
+  .ptab {
+    padding: 5px 12px; border-radius: 6px 6px 0 0;
+    background: none; border: 1px solid transparent;
+    color: var(--muted); cursor: pointer; font-size: 12px;
+    white-space: nowrap; transition: all .15s;
+  }
+  .ptab:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+  .ptab.active { background: var(--bg); border-color: var(--border); border-bottom-color: var(--bg); color: var(--text); }
+
+  /* ── Context bar ── */
+  #ctxBar {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 10px;
+    background: rgba(76,201,240,0.06);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px; flex-shrink: 0;
+  }
+  #ctxBar .ctx-label { color: var(--muted); white-space: nowrap; }
+  #ctxBar #ctxUrl {
+    flex: 1; color: var(--accent2); overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  #ctxBar #btnSendCtx {
+    background: none; border: 1px solid var(--border);
+    color: var(--muted); padding: 2px 6px; border-radius: 4px;
+    cursor: pointer; font-size: 11px; white-space: nowrap;
+  }
+  #ctxBar #btnSendCtx:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  /* ── Browser mode btn ── */
+  #ctxBar #btnBrowserMode {
+    background: none; border: 1px solid var(--border);
+    color: var(--muted); padding: 2px 8px; border-radius: 4px;
+    cursor: pointer; font-size: 11px; white-space: nowrap; transition: all .2s;
+  }
+  #ctxBar #btnBrowserMode.active {
+    background: rgba(76,201,240,0.15);
+    border-color: var(--accent2); color: var(--accent2);
+  }
+
+  /* ── Webview area ── */
+  #webviewArea { flex: 1; position: relative; overflow: hidden; min-height: 0; }
+  .ai-wv {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    border: none;
+    visibility: hidden; pointer-events: none;
+  }
+  .ai-wv.active { visibility: visible; pointer-events: auto; }
+
+  /* ── Layout ── */
+  #main { display: flex; flex-direction: column; height: 100vh; }
+</style>
+</head>
+<body>
+<div id="main">
+  <!-- Titlebar -->
+  <div id="titlebar">
+    <span class="logo">🥔 AI Assistent</span>
+    <button id="btnMinimize" title="Minimieren"><i data-lucide="minus" width="13" height="13"></i></button>
+    <button id="btnClose"    title="Schließen"><i data-lucide="x"     width="13" height="13"></i></button>
+  </div>
+
+  <!-- Provider tabs -->
+  <div id="providerTabs"></div>
+
+  <!-- Context bar -->
+  <div id="ctxBar">
+    <span class="ctx-label">Tab:</span>
+    <span id="ctxUrl">—</span>
+    <button id="btnSendCtx" title="Aktuellen Tab-Inhalt an AI senden">📋 Kontext senden</button>
+    <button id="btnBrowserMode" title="Browser-Modus: AI kann URLs öffnen">🌐 Browser-Modus</button>
+  </div>
+
+  <!-- Webviews -->
+  <div id="webviewArea"></div>
+</div>
+
+<script>
+// ── Providers ────────────────────────────────────────────────────────────────
+// Vollständige Liste als Fallback, falls das Fenster ohne Detach-Kontext geöffnet wird.
+// IDs/URLs müssen mit AI_PROVIDERS in index.html übereinstimmen (gleiche Partitionen = gleicher Login).
+const ALL_PROVIDERS = [
+  { id:'claude',     name:'Claude',      url:'https://claude.ai',             color:'#d97706' },
+  { id:'chatgpt',    name:'ChatGPT',     url:'https://chatgpt.com',           color:'#10a37f' },
+  { id:'gemini',     name:'Gemini',      url:'https://gemini.google.com',     color:'#4285f4' },
+  { id:'perplexity', name:'Perplexity',  url:'https://www.perplexity.ai',     color:'#7c3aed' },
+  { id:'copilot',    name:'Copilot',     url:'https://copilot.microsoft.com', color:'#0078d4' },
+  { id:'grok',       name:'Grok',        url:'https://grok.com',              color:'#1d9bf0' },
+  { id:'deepseek',   name:'DeepSeek',    url:'https://chat.deepseek.com',     color:'#3b82f6' },
+  { id:'mistral',    name:'Mistral',     url:'https://chat.mistral.ai',       color:'#f97316' },
+];
+
+const webviews   = {};
+let   activeId   = null;
+let   browserCtx = null;  // { url, title, text }
+let   browserModeOn = false;
+
+const tabsEl = document.getElementById('providerTabs');
+const wvArea = document.getElementById('webviewArea');
+
+function buildProvider(p) {
+  const tab = document.createElement('button');
+  tab.className = 'ptab';
+  tab.textContent = p.name;
+  tab.style.setProperty('--c', p.color);
+  tab.addEventListener('click', () => switchProvider(p.id));
+  tab.dataset.id = p.id;
+  tabsEl.appendChild(tab);
+
+  const wv = document.createElement('webview');
+  wv.className = 'ai-wv';
+  wv.src = p.url;
+  // Gleiche Partition wie die In-App-Sidebar (persist:kp-ai-<id>) → geteilter Login,
+  // kein erneutes Anmelden / "Neuladen"-Gefühl beim Loslösen ins eigene Fenster.
+  wv.setAttribute('partition', `persist:kp-ai-${p.id}`);
+  wv.setAttribute('allowpopups', '');
+  wvArea.appendChild(wv);
+  webviews[p.id] = wv;
+  attachIpcLinkListener(wv);
+
+  wv.addEventListener('will-navigate', e => {
+    if (!browserModeOn) return;
+    try {
+      const provHost = new URL(p.url).hostname;
+      const navHost  = new URL(e.url).hostname;
+      if (navHost === provHost || navHost.endsWith('.' + provHost)) return;
+    } catch { return; }
+    e.preventDefault();
+    window.aiAPI.openUrl(e.url);
+    showToast('Im Browser geöffnet: ' + e.url);
+  });
+
+  wv.addEventListener('new-window', e => {
+    if (!browserModeOn) return;
+    e.preventDefault();
+    if (e.url) { window.aiAPI.openUrl(e.url); showToast('Im Browser geöffnet!'); }
+  });
+}
+
+function switchProvider(id) {
+  if (activeId === id) return;
+  activeId = id;
+  document.querySelectorAll('.ptab').forEach(t => t.classList.toggle('active', t.dataset.id === id));
+  document.querySelectorAll('.ai-wv').forEach(w => w.classList.toggle('active', w === webviews[id]));
+}
+
+async function initProviders() {
+  let config = { providers: [], active: null };
+  try { config = (await window.aiAPI.getInitConfig()) || config; } catch {}
+  const list = (config.providers && config.providers.length) ? config.providers : ALL_PROVIDERS;
+  list.forEach(buildProvider);
+  switchProvider(config.active && webviews[config.active] ? config.active : list[0]?.id);
+}
+initProviders();
+
+// ── Titlebar buttons ──────────────────────────────────────────────────────────
+document.getElementById('btnMinimize').addEventListener('click', () => window.aiAPI.minimize());
+document.getElementById('btnClose').addEventListener('click',    () => window.aiAPI.close());
+
+// ── Context bar ───────────────────────────────────────────────────────────────
+const ctxUrlEl = document.getElementById('ctxUrl');
+
+let _lastAutoCtxUrl = null;
+let _lastAutoOpenedUrl = null;
+let _linkScanTimer = null;
+let _ctxExplainedProviders = new Set();
+
+function explainAutoCtxOnce(wv, providerId) {
+  return; // deaktiviert zusammen mit autoSendCtxIfEnabled
+  if (_ctxExplainedProviders.has(providerId)) return;
+  _ctxExplainedProviders.add(providerId);
+  const msg = 'Kurzer Hinweis: ich nutze dich hier eingebettet in meinem Browser "Kartoffel Puffer". ' +
+    'Ich schicke dir ab und zu automatisch mit, welche Seite ich gerade offen habe (Titel, URL, Textauszug) ' +
+    '– das ist reine Info, du musst nicht extra antworten, nutze es einfach wenn ich danach frage.';
+  injectText(wv, msg, true);
+}
+
+// Receive live context from browser
+window.aiAPI.onBrowserContext(ctx => {
+  const urlChanged = ctx?.url && ctx.url !== browserCtx?.url;
+  browserCtx = ctx;
+  ctxUrlEl.textContent = ctx?.title || ctx?.url || '—';
+  ctxUrlEl.title = ctx?.url || '';
+  if (!urlChanged) return; // did-stop-loading kann mehrfach pro Seite feuern, nur bei echtem Wechsel reagieren
+  const wv = webviews[activeId];
+  if (wv && !_ctxExplainedProviders.has(activeId)) {
+    explainAutoCtxOnce(wv, activeId);
+    _lastAutoCtxUrl = null; _lastAutoCtxTime = 0;
+    setTimeout(autoSendCtxIfEnabled, 1200);
+  } else {
+    autoSendCtxIfEnabled();
+  }
+});
+
+let _lastAutoCtxTime = 0;
+const AUTO_CTX_COOLDOWN_MS = 20000; // min. 20s zwischen automatischen Kontext-Nachrichten
+async function autoSendCtxIfEnabled() {
+  return; // deaktiviert: automatischer Kontext-Versand nervte (spammte Nachrichten); nur noch manuell über den Button
+  if (!browserCtx?.url || browserCtx.url === _lastAutoCtxUrl) return;
+  if (Date.now() - _lastAutoCtxTime < AUTO_CTX_COOLDOWN_MS) return;
+  const wv = webviews[activeId];
+  if (!wv) return;
+  _lastAutoCtxUrl = browserCtx.url;
+  _lastAutoCtxTime = Date.now();
+  const { url, title, text } = browserCtx;
+  const msg = `Kurzer Hinweis: ich schaue mir gerade "${title || url}" (${url}) an.` +
+    (text ? `\n\nAuszug vom Seiteninhalt:\n${text.slice(0, 4000)}` : '') +
+    `\n\nDas ist nur zur Info, du musst nicht extra antworten – frag mich einfach falls du dazu was wissen willst.`;
+  injectText(wv, msg, true);
+}
+
+// Findet die zuletzt genannte fremde URL im sichtbaren Text der Seite (nicht nur
+// echte <a>-Links, da viele Chat-UIs URLs als reinen Text ohne Verlinkung schreiben).
+function _linkScanScript() {
+  return `(function(){
+    function rootDomain(h){ const p=h.split('.'); return p.slice(-2).join('.'); }
+    const selfRoot = rootDomain(location.hostname);
+    const text = document.body && document.body.innerText || '';
+    const matches = text.match(/https?:\\/\\/[^\\s<>"')]+/g) || [];
+    for (let i = matches.length - 1; i >= 0; i--) {
+      let raw = matches[i].replace(/[.,;:!?]+$/, '');
+      try {
+        const u = new URL(raw);
+        if (rootDomain(u.hostname) !== selfRoot) return raw;
+      } catch {}
+    }
+    return null;
+  })()`;
+}
+
+function primeLinkScan() {
+  // Merkt sich vorhandene Links als "schon gesehen", damit beim Einschalten
+  // nicht sofort ein alter Link geöffnet wird.
+  const wv = webviews[activeId];
+  if (!wv) return;
+  wv.executeJavaScript(_linkScanScript()).then(url => { if (url) _lastAutoOpenedUrl = url; }).catch(() => {});
+}
+
+function scanAiReplyForLink() {
+  if (!browserModeOn) return;
+  const wv = webviews[activeId];
+  if (!wv) return;
+  wv.executeJavaScript(_linkScanScript()).then(url => {
+    if (url && url !== _lastAutoOpenedUrl) {
+      _lastAutoOpenedUrl = url;
+      window.aiAPI.openUrl(url);
+      showToast('Link von AI im Browser geöffnet!');
+    }
+  }).catch(() => {});
+}
+
+// On open: fetch current context once
+window.aiAPI.getContext().then(ctx => {
+  if (ctx) {
+    browserCtx = ctx;
+    ctxUrlEl.textContent = ctx.title || ctx.url || '—'; ctxUrlEl.title = ctx.url || '';
+    const wv = webviews[activeId];
+    if (wv) {
+      explainAutoCtxOnce(wv, activeId);
+      _lastAutoCtxUrl = null; _lastAutoCtxTime = 0;
+      setTimeout(autoSendCtxIfEnabled, 1200);
+    }
+  }
+});
+
+// Send context to AI
+document.getElementById('btnSendCtx').addEventListener('click', () => {
+  if (!browserCtx) { showToast('Kein Tab-Kontext verfügbar'); return; }
+  const wv = webviews[activeId];
+  if (!wv) return;
+  const url  = browserCtx.url   || '';
+  const text = browserCtx.text  || '';
+  const title= browserCtx.title || url;
+  const msg  = text
+    ? `Ich schaue gerade auf: "${title}" (${url})\n\nSeiteninhalt (Auszug):\n${text.slice(0, 4000)}`
+    : `Ich schaue gerade auf: "${title}" (${url})`;
+
+  injectText(wv, msg);
+  showToast('Kontext gesendet!');
+});
+
+// ── Browser-Modus: steuert nur noch automatisches Link-Öffnen ────────────────
+// ("Seite sehen" läuft immer automatisch, siehe onBrowserContext oben)
+const BROWSER_MODE_PROMPT =
+  'Noch ein Hinweis: wenn ich dich bitte eine Website zu öffnen (z.B. "öffne YouTube", "such mir Video X"), ' +
+  'kannst du einfach den vollständigen Link als Text schreiben (z.B. https://youtube.com) – mein Browser ' +
+  'erkennt das automatisch und öffnet es als neuen Tab für mich, du musst also nicht ablehnen. Kennst du die ' +
+  'exakte Ziel-URL nicht (z.B. ein bestimmtes Video), reicht auch ein Such-Link wie ' +
+  'https://www.youtube.com/results?search_query=DEIN+SUCHBEGRIFF.';
+
+document.getElementById('btnBrowserMode').addEventListener('click', () => {
+  browserModeOn = !browserModeOn;
+  const btn = document.getElementById('btnBrowserMode');
+  btn.classList.toggle('active', browserModeOn);
+  btn.textContent = browserModeOn ? '🌐 Browser-Modus AN' : '🌐 Browser-Modus';
+
+  if (browserModeOn) {
+    const wv = webviews[activeId];
+    if (wv) injectText(wv, BROWSER_MODE_PROMPT, true);
+    showToast('Automatisches Link-Öffnen aktiv');
+    if (_linkScanTimer) clearInterval(_linkScanTimer);
+    primeLinkScan();
+    _linkScanTimer = setInterval(scanAiReplyForLink, 2500);
+  } else {
+    showToast('Automatisches Link-Öffnen deaktiviert');
+    if (_linkScanTimer) { clearInterval(_linkScanTimer); _linkScanTimer = null; }
+  }
+});
+
+// ── Helper: inject text into AI input ────────────────────────────────────────
+function injectText(wv, text, submit) {
+  // Works for Claude, ChatGPT, Gemini, Perplexity, Grok
+  const code = `
+    (function() {
+      const sel = [
+        'div[contenteditable="true"][data-testid]',
+        'p[contenteditable="true"]',
+        'div[contenteditable="true"]',
+        'textarea',
+        'input[type="text"]'
+      ];
+      let el = null;
+      for (const s of sel) {
+        const found = document.querySelector(s);
+        if (found) { el = found; break; }
+      }
+      if (!el) return false;
+      el.focus();
+      if (el.isContentEditable) {
+        el.textContent = ${JSON.stringify(text)};
+        el.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      } else {
+        el.value = ${JSON.stringify(text)};
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (${!!submit}) {
+        setTimeout(() => {
+          const opts = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+          el.dispatchEvent(new KeyboardEvent('keydown', opts));
+          el.dispatchEvent(new KeyboardEvent('keyup', opts));
+        }, 150);
+      }
+      return true;
+    })();
+  `;
+  wv.executeJavaScript(code).catch(() => {});
+}
+
+// ── Link detection in AI responses → open in browser ─────────────────────────
+// Wird pro Webview in buildProvider() registriert (siehe oben), da Webviews
+// jetzt asynchron über initProviders() erzeugt werden.
+function attachIpcLinkListener(wv) {
+  wv.addEventListener('ipc-message', e => {
+    if (e.channel === 'kp-open-url') {
+      window.aiAPI.openUrl(e.args[0]);
+    }
+  });
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function showToast(msg) {
+  let t = document.getElementById('_toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = '_toast';
+    Object.assign(t.style, {
+      position:'fixed', bottom:'14px', left:'50%', transform:'translateX(-50%)',
+      background:'#1e2d3d', color:'#e2e8f0', padding:'7px 16px',
+      borderRadius:'8px', fontSize:'12px', zIndex:'9999',
+      border:'1px solid #2a3548', pointerEvents:'none',
+      transition:'opacity .3s', opacity:'0'
+    });
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = '0'; }, 2500);
+}
+
+// ── Lucide icons ──────────────────────────────────────────────────────────────
+try { lucide.createIcons(); } catch(e) {}
+</script>
+</body>
+</html>

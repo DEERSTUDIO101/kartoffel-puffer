@@ -1,0 +1,2005 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8"/>
+<title>Kartoffel Puffer</title>
+<link rel="icon" type="image/png" href="icons/Logo_kartoffelPuffer_lightmode.png"/>
+<script src="js/lucide.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/idb.js"></script>
+<script src="js/storage.js"></script>
+<script src="js/ui-builder.js"></script>
+<style>
+:root {
+  --accent:#ff9f1c; --accent2:#4cc9f0; --danger:#ff5c7a;
+  --radius:12px; --sidebar-width:360px;
+  --font:'Inter',system-ui,sans-serif;
+  --panel:rgba(13,21,32,0.92); --panel-border:rgba(255,255,255,0.08);
+  --text:#ecf2f8; --muted:#64748b; --bg:#070b10;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:radial-gradient(circle at top,#132033 0%,#070b10 55%);color:var(--text);font-family:var(--font);font-size:15px}
+button{cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:inherit}
+
+/* ── App layout ── */
+html,body,#app{margin:0;padding:0;width:100%;height:100%;overflow:hidden}
+#toolbar{position:absolute;top:0;left:0;right:0;z-index:10}
+/* ↓ Passe 76px an falls Toolbar höher/kleiner (muss zu #mainArea top passen) */
+#bookmarksBar{position:absolute;top:76px;left:0;right:0;z-index:9;display:none}
+#mainArea{position:absolute;top:76px;left:0;right:0;bottom:0;display:flex;overflow:hidden}
+/* Wenn Lesezeichen sichtbar sind, Content-Bereich um Bookmarks-Bar-Höhe verschieben */
+body.has-bookmarks #mainArea{top:106px}
+#content{flex:1;height:100%;position:relative;overflow:hidden}
+#aiSidebar{flex-shrink:0;overflow:hidden;display:none;flex-direction:column}
+#aiSidebar.open{display:flex}
+webview{position:absolute;top:0;left:0;right:0;bottom:0;border:none;visibility:hidden;pointer-events:none}
+webview.active{visibility:visible;pointer-events:auto}
+#content>.newtab-page{position:absolute;top:0;left:0;right:0;bottom:0;display:none}
+#content>.newtab-page.active{display:flex}
+
+/* ── Toolbar ── */
+#toolbar{display:flex;flex-direction:column;background:var(--toolbar-panel,var(--panel));border-bottom:1px solid var(--panel-border);flex-shrink:0;-webkit-app-region:drag}
+#toolbar button,#toolbar input,#toolbar select,#toolbar a,.tab,#bookmarksBar,.bookmark-item{-webkit-app-region:no-drag}
+
+/* ── Tab bar ── */
+#tabBar{display:flex;align-items:flex-end;gap:2px;padding:0 6px 0;min-height:36px;overflow-x:auto;scrollbar-width:none}
+#tabBar::-webkit-scrollbar{display:none}
+.tab{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:8px 8px 0 0;background:rgba(255,255,255,0.04);border:1px solid transparent;border-bottom:none;color:var(--muted);font-size:12px;cursor:pointer;max-width:180px;min-width:80px;white-space:nowrap;overflow:hidden;transition:background .12s,color .12s;user-select:none}
+.tab:hover{background:rgba(255,255,255,0.07);color:var(--text)}
+.tab.active{background:rgba(255,255,255,0.11);border-color:var(--panel-border);color:var(--text)}
+.tab.incognito{background:rgba(168,85,247,0.14)}
+.tab.incognito.active{background:rgba(168,85,247,0.22);border-color:rgba(168,85,247,0.4)}
+.tab-title{flex:1;overflow:hidden;text-overflow:ellipsis}
+.close-tab{opacity:0;display:flex;align-items:center;padding:1px;border-radius:4px;transition:opacity .12s}
+.tab:hover .close-tab,.tab.active .close-tab{opacity:1}
+.close-tab:hover{background:rgba(255,255,255,0.12)}
+.tab-favicon{width:14px;height:14px;object-fit:contain}
+#newTabBtn{flex-shrink:0;width:26px;height:26px;border:none;border-radius:6px;background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1;margin-left:2px;align-self:flex-end;transition:background .12s,color .12s}
+#newTabBtn:hover{background:rgba(255,255,255,0.08);color:var(--text)}
+.tabs-compact .tab{padding:2px 8px;min-width:60px}
+.tabs-pill .tab{border-radius:999px;border:1px solid var(--panel-border)}
+/* Icon-Only: Favicon oben, Close-Button darunter, Titel als Hover-Tooltip */
+.tabs-icon-only { --tab-sidebar-w: 54px; }
+
+/* Seitenleiste (links/rechts): Tab vertikal gestapelt */
+.tabs-icon-only.tabs-left .tab,
+.tabs-icon-only.tabs-right .tab {
+  flex-direction:column; align-items:center; justify-content:center;
+  min-width:46px; max-width:46px; width:46px;
+  min-height:52px; padding:7px 4px; gap:4px; position:relative;
+}
+/* Icon-wrap zentriert */
+.tabs-icon-only.tabs-left .tab .tab-icon-wrap,
+.tabs-icon-only.tabs-right .tab .tab-icon-wrap {
+  display:flex; align-items:center; justify-content:center; width:20px; height:20px;
+}
+/* Titel ausblenden */
+.tabs-icon-only .tab .tab-title { display:none; }
+/* Close-Button immer dezent sichtbar, bei Hover/aktiv voll */
+.tabs-icon-only.tabs-left .tab .close-tab,
+.tabs-icon-only.tabs-right .tab .close-tab {
+  opacity:.3; display:flex; align-items:center; justify-content:center;
+  width:16px; height:16px; padding:1px; border-radius:4px;
+}
+.tabs-icon-only.tabs-left .tab:hover .close-tab,
+.tabs-icon-only.tabs-right .tab:hover .close-tab,
+.tabs-icon-only.tabs-left .tab.active .close-tab,
+.tabs-icon-only.tabs-right .tab.active .close-tab { opacity:1; }
+
+/* Hover-Tooltip: Tab-Name rechts neben dem Tab (links-Sidebar) */
+.tabs-icon-only.tabs-left .tab::after,
+.tabs-icon-only.tabs-right .tab::after {
+  content:attr(data-title);
+  position:absolute; top:50%; transform:translateY(-50%);
+  background:#1a2030; border:1px solid #2a3548; border-radius:7px;
+  padding:5px 12px; font-size:12px; color:#ecf2f8; white-space:nowrap;
+  pointer-events:none; opacity:0;
+  transition:opacity .15s ease; transition-delay:.25s;
+  z-index:99999; box-shadow:0 4px 18px rgba(0,0,0,.55);
+}
+.tabs-icon-only.tabs-left .tab::after  { left:calc(100% + 10px); }
+.tabs-icon-only.tabs-right .tab::after { right:calc(100% + 10px); }
+.tabs-icon-only.tabs-left .tab:hover::after,
+.tabs-icon-only.tabs-right .tab:hover::after { opacity:1; }
+
+/* Top/Bottom-Leiste icon-only: horizontal, nur kompakter */
+.tabs-icon-only.tabs-top .tab,
+.tabs-icon-only.tabs-bottom .tab {
+  min-width:38px; max-width:38px; padding:4px 4px; justify-content:center; gap:3px; position:relative;
+}
+.tabs-icon-only.tabs-top .tab::after,
+.tabs-icon-only.tabs-bottom .tab::after {
+  content:attr(data-title);
+  position:absolute; top:calc(100% + 8px); left:50%; transform:translateX(-50%);
+  background:#1a2030; border:1px solid #2a3548; border-radius:7px;
+  padding:5px 12px; font-size:12px; color:#ecf2f8; white-space:nowrap;
+  pointer-events:none; opacity:0; transition:opacity .15s ease; transition-delay:.25s;
+  z-index:99999; box-shadow:0 4px 18px rgba(0,0,0,.55);
+}
+.tabs-icon-only.tabs-top .tab:hover::after,
+.tabs-icon-only.tabs-bottom .tab:hover::after { opacity:1; }
+
+/* NewTab-Button + Win-Controls in icon-only-Sidebar */
+.tabs-icon-only.tabs-left #newTabBtn,
+.tabs-icon-only.tabs-right #newTabBtn { width:36px; height:36px; align-self:center; }
+.tabs-icon-only.tabs-left #tabBar #winControls,
+.tabs-icon-only.tabs-right #tabBar #winControls { flex-direction:column; gap:2px; align-self:center; }
+.tabs-icon-only.tabs-left #tabBar #winControls .win-btn,
+.tabs-icon-only.tabs-right #tabBar #winControls .win-btn { width:36px; height:26px; }
+
+/* ── Nav bar ── */
+#navBar{display:flex;align-items:center;gap:4px;padding:4px 8px;min-height:40px}
+.nav-btn{width:30px;height:30px;border:none;border-radius:7px;background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s}
+.nav-btn:hover{background:rgba(255,255,255,0.08);color:var(--text)}
+.nav-btn.active{color:var(--accent)}
+#secBadge{width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:5px;flex-shrink:0}
+#secBadge.ok{color:#22c55e}
+#secBadge.warn{color:var(--danger)}
+.url-suggestion{display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;color:var(--muted);font-size:12px}
+.url-suggestion:hover{background:rgba(255,255,255,0.06);color:var(--text)}
+.url-suggestion .us-title{flex-shrink:0;color:var(--text);max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.url-suggestion .us-url{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#urlbar{flex:1;height:30px;background:rgba(255,255,255,0.06);border:1px solid var(--panel-border);border-radius:8px;padding:0 32px 0 10px;color:var(--text);outline:none;transition:border-color .15s,background .15s}
+#urlbar:focus{border-color:var(--accent);background:rgba(255,255,255,0.09)}
+#btnMic{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:24px;height:24px;border:none;border-radius:5px;background:transparent;color:var(--muted);cursor:pointer;display:none;align-items:center;justify-content:center;transition:color .15s,background .15s;flex-shrink:0}
+#btnMic.available{display:flex}
+#btnMic:hover{background:rgba(255,255,255,.08);color:var(--text)}
+#btnMic.recording{color:#ef4444;animation:_micPulse 1s ease-in-out infinite}
+#urlbar.listening{border-color:#ef4444;background:rgba(239,68,68,.06)}
+@keyframes _micPulse{0%,100%{opacity:1}50%{opacity:.45}}
+
+/* ── Win controls ── */
+#winControls{display:flex;align-items:center;gap:2px;margin-left:auto;flex-shrink:0;padding-right:4px;align-self:center;-webkit-app-region:no-drag}
+.win-btn{width:28px;height:28px;border:none;background:transparent;color:var(--muted);cursor:pointer;border-radius:6px;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s}
+.win-btn:hover{background:rgba(255,255,255,0.08);color:var(--text)}
+.win-btn.close:hover{background:#c0392b;color:#fff}
+
+/* ── Bookmarks bar ── */
+#bookmarksBar{display:none;flex-wrap:nowrap;gap:4px;padding:3px 8px;background:rgba(0,0,0,0.15);border-bottom:1px solid var(--panel-border);overflow-x:auto;scrollbar-width:none}
+.bookmark-item{display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap;color:var(--muted);transition:background .12s,color .12s}
+.bookmark-item:hover{background:rgba(255,255,255,0.07);color:var(--text)}
+.bookmark-item img{width:13px;height:13px;object-fit:contain}
+
+/* ── New tab page ── */
+.newtab-page{display:none;align-items:center;justify-content:center;flex-direction:column;font-size:1rem;overflow:auto}
+.newtab-page.active{display:flex}
+.newtab-card{background:var(--panel);border:1px solid var(--panel-border);border-radius:var(--radius);padding:2.5rem 2rem;width:100%;max-width:520px;display:flex;flex-direction:column;align-items:center;gap:.75rem;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.newtab-card h1{font-size:1.8rem;color:var(--text);margin-bottom:.1rem}
+.newtab-card p{color:var(--muted);font-size:.9rem;margin-bottom:.5rem}
+.quick-links{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center}
+.quick-btn{padding:6px 16px;border:1px solid var(--panel-border);border-radius:8px;background:rgba(255,255,255,0.05);color:var(--text);font-size:.85rem;transition:background .12s,border-color .12s}
+.quick-btn:hover{background:rgba(255,255,255,0.1);border-color:var(--accent)}
+
+/* ── AI Sidebar ── */
+#aiSidebar{width:var(--sidebar-width);background:var(--panel);border-left:1px solid var(--panel-border);display:none;flex-direction:column;flex-shrink:0;overflow:hidden}
+#aiSidebar.open{display:flex}
+#aiSidebar.left{border-left:none;border-right:1px solid var(--panel-border)}
+.ai-header{display:flex;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid var(--panel-border);flex-shrink:0}
+.ai-header-title{flex:1;font-size:12px;font-weight:600;color:var(--accent)}
+.ai-ctx-bar{display:flex;align-items:center;gap:6px;padding:5px 10px;border-bottom:1px solid var(--panel-border);font-size:11px;background:rgba(76,201,240,.05);flex-shrink:0}
+#aiCtxUrl{flex:1;color:var(--accent2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#aiProviderTabs{display:flex;gap:2px;padding:6px 8px 0;border-bottom:1px solid var(--panel-border);overflow-x:auto;scrollbar-width:none;flex-shrink:0}
+#aiProviderTabs::-webkit-scrollbar{display:none}
+.ai-tab{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:6px 6px 0 0;background:none;border:1px solid transparent;color:var(--muted);font-size:12px;cursor:pointer;white-space:nowrap;transition:all .12s}
+.ai-tab:hover{background:rgba(255,255,255,0.05);color:var(--text)}
+.ai-tab.active{background:rgba(255,255,255,0.09);border-color:var(--panel-border);color:var(--text)}
+.ai-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+#aiWebviewContainer{flex:1;position:relative;overflow:hidden;min-height:0}
+.ai-webview{position:absolute;top:0;left:0;right:0;bottom:0;border:none;visibility:hidden;pointer-events:none}
+.ai-webview.active{visibility:visible;pointer-events:auto}
+
+/* ── Context menu ── */
+#_kpCtxMenu,#_kpCtxSub{position:fixed;z-index:99999;background:#1a2030;border:1px solid #2a3548;border-radius:8px;padding:4px;min-width:170px;box-shadow:0 8px 24px rgba(0,0,0,.6);font-size:13px}
+/* Unsichtbare Auffangfläche unter dem Menü: Klicks in einem <webview> bubblen
+   nicht zum Host-Dokument, ein document-Listener sieht sie also nie. Diese
+   Fläche liegt im Host über dem Webview und fängt den Schließklick ab. */
+#_kpCtxBackdrop{position:fixed;inset:0;z-index:99998;background:rgba(0,0,0,0.01)}
+._ctx-item.has-sub{display:flex;align-items:center;justify-content:space-between}
+._ctx-arrow{color:var(--muted);font-size:15px;line-height:1}
+._ctx-item{padding:6px 14px;border-radius:5px;cursor:pointer;color:var(--text);white-space:nowrap;display:flex;align-items:center;gap:8px;transition:background .1s}
+._ctx-item:hover{background:rgba(255,255,255,0.08)}
+._ctx-item.danger{color:var(--danger)}
+._ctx-item.disabled{opacity:.35;cursor:default;pointer-events:none}
+._ctx-accel{margin-left:auto;padding-left:28px;color:var(--muted);font-size:11.5px;white-space:nowrap}
+._ctx-sep{height:1px;background:var(--panel-border);margin:3px 6px}
+
+/* ── Toast ── */
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(20px);background:#1e2d3d;border:1px solid #2a3548;border-radius:8px;padding:8px 18px;color:var(--text);font-size:13px;z-index:9998;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── Overlays ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.overlay.open,.overlay[style*="flex"]{display:flex}
+.overlay-box{background:#0d1520;border:1px solid var(--panel-border);border-radius:var(--radius);width:min(680px,95vw);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 16px 48px rgba(0,0,0,.6)}
+.overlay-header{display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--panel-border);flex-shrink:0}
+.overlay-title{font-size:1rem;font-weight:600;flex:1}
+.overlay-close{width:28px;height:28px;border:none;background:transparent;color:var(--muted);border-radius:6px;display:flex;align-items:center;justify-content:center;transition:background .12s}
+.overlay-close:hover{background:rgba(255,255,255,0.08);color:var(--text)}
+
+/* ── Settings ── */
+#settingsOverlay .overlay-box{width:min(780px,96vw)}
+.s-layout{display:flex;flex:1;overflow:hidden}
+.s-nav{width:160px;border-right:1px solid var(--panel-border);padding:8px;flex-shrink:0}
+.snav-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:7px;cursor:pointer;color:var(--muted);font-size:13px;transition:background .12s,color .12s}
+.snav-item:hover{background:rgba(255,255,255,0.05);color:var(--text)}
+.snav-item.active{background:rgba(255,159,28,0.12);color:var(--accent)}
+.s-content{flex:1;overflow-y:auto;padding:16px}
+.s-page{display:none}
+.s-page.active{display:block}
+.s-section{margin-bottom:1.4rem}
+.s-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:.5rem}
+.s-row{display:flex;align-items:center;gap:10px;margin-bottom:.6rem;flex-wrap:wrap}
+.s-input{background:rgba(255,255,255,0.06);border:1px solid var(--panel-border);border-radius:7px;padding:6px 10px;color:var(--text);outline:none;transition:border-color .15s}
+.s-input:focus{border-color:var(--accent)}
+.s-select{background:#0d1520;border:1px solid var(--panel-border);border-radius:7px;padding:6px 10px;color:var(--text);outline:none;color-scheme:dark}
+.s-select option{background:#1a2535;color:#ecf2f8}
+.s-btn{padding:5px 14px;border:1px solid var(--panel-border);border-radius:7px;background:rgba(255,255,255,0.05);color:var(--text);font-size:13px;transition:background .12s}
+.s-btn:hover{background:rgba(255,255,255,0.1)}
+.s-btn.danger{border-color:rgba(255,92,122,0.3);color:var(--danger)}
+.s-btn.danger:hover{background:rgba(255,92,122,0.1)}
+.s-btn.primary{border-color:var(--accent);color:var(--accent)}
+.s-btn.primary:hover{background:rgba(255,159,28,0.1)}
+.s-toggle{position:relative;display:inline-block;width:36px;height:20px;flex-shrink:0}
+.s-toggle input{opacity:0;width:0;height:0}
+.s-toggle-track{position:absolute;inset:0;background:rgba(255,255,255,0.1);border-radius:10px;transition:background .2s}
+.s-toggle input:checked+.s-toggle-track{background:var(--accent)}
+.s-toggle-track::after{content:'';position:absolute;left:2px;top:2px;width:16px;height:16px;background:#fff;border-radius:50%;transition:transform .2s}
+.s-toggle input:checked+.s-toggle-track::after{transform:translateX(16px)}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+.toggle-label{font-size:13px}
+.toggle-desc{font-size:11px;color:var(--muted)}
+.color-row{display:flex;align-items:center;gap:8px;margin-bottom:.5rem}
+.color-swatch{width:24px;height:24px;border-radius:5px;border:1px solid var(--panel-border);flex-shrink:0}
+.color-label{font-size:13px;flex:1}
+.theme-chip,.bg-opt,.layout-opt{padding:5px 12px;border:1px solid var(--panel-border);border-radius:6px;background:rgba(255,255,255,0.04);color:var(--muted);font-size:12px;cursor:pointer;transition:all .12s;white-space:nowrap}
+.theme-chip.selected,.bg-opt.active,.layout-opt.selected{border-color:var(--accent);color:var(--accent);background:rgba(255,159,28,0.08)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.bg-section.hidden{display:none}
+.slider-row{display:flex;align-items:center;gap:10px}
+input[type=range]{flex:1;accent-color:var(--accent);cursor:pointer}
+.slider-val{font-size:12px;color:var(--muted);min-width:36px;text-align:right}
+.ai-provider-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--panel-border)}
+.ai-provider-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.ai-provider-info{flex:1}
+.ai-provider-info strong{font-size:13px;display:block}
+.ai-provider-info small{color:var(--muted);font-size:11px}
+
+/* ── History overlay ── */
+#historyOverlay .overlay-box{max-height:80vh}
+.history-item{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--panel-border);cursor:pointer;transition:background .1s}
+.history-item:hover{background:rgba(255,255,255,0.04)}
+.hi-time{font-size:11px;color:var(--muted);min-width:38px;flex-shrink:0}
+.hi-title{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hi-url{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hi-del{display:flex;align-items:center;padding:2px;border-radius:4px;color:var(--muted);flex-shrink:0}
+.hi-del:hover{background:rgba(255,92,122,0.2);color:var(--danger)}
+.dl-item{padding:10px 14px;border-bottom:1px solid var(--panel-border)}
+.dl-name{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:4px}
+.dl-meta{font-size:11px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:6px}
+.dl-bar{height:4px;border-radius:2px;background:rgba(255,255,255,0.08);overflow:hidden;margin-bottom:6px}
+.dl-bar-fill{height:100%;background:var(--accent2);transition:width .2s}
+.dl-actions{display:flex;gap:6px}
+
+/* ── Password overlay ── */
+#pwOverlay .overlay-box{max-height:80vh}
+.pw-tabs{display:flex;gap:2px;padding:8px 12px;border-bottom:1px solid var(--panel-border)}
+.pw-tab{padding:5px 14px;border-radius:6px;border:1px solid transparent;color:var(--muted);font-size:13px;cursor:pointer;transition:all .12s;background:none}
+.pw-tab.active{background:rgba(255,159,28,0.1);border-color:rgba(255,159,28,0.3);color:var(--accent)}
+.pw-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--panel-border)}
+.pw-info{flex:1;min-width:0}
+.pw-site{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pw-user{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pw-actions{display:flex;gap:4px}
+
+/* ── Master PW overlay ── */
+#masterPwOverlay .overlay-box{max-width:400px}
+.mpw-strength{display:flex;gap:3px;margin-top:4px}
+.mpw-bar{height:3px;flex:1;border-radius:2px;background:rgba(255,255,255,0.1);transition:background .2s}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.18)}
+
+/* ── Berechtigungs-Verwaltung ── */
+.perm-group{border-bottom:1px solid var(--panel-border)}
+.perm-group-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px}
+.perm-group-title{font-size:13px;font-weight:500}
+.perm-default{background:rgba(255,255,255,.05);border:1px solid var(--panel-border);border-radius:6px;
+  color:var(--text);font-size:11.5px;padding:4px 7px;cursor:pointer}
+.perm-site{display:flex;align-items:center;gap:9px;padding:7px 14px 7px 26px;font-size:12px}
+.perm-site + .perm-site{border-top:1px solid rgba(255,255,255,.04)}
+.perm-site-origin{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.perm-state{font-size:10px;font-weight:700;letter-spacing:.4px;padding:2px 7px;border-radius:4px;text-transform:uppercase}
+.perm-state.allow{background:rgba(34,197,94,.14);color:#4ade80}
+.perm-state.block{background:rgba(239,68,68,.14);color:#f87171}
+
+/* ── Berechtigungs-Abfrage ── */
+#permPrompt{display:none;position:fixed;z-index:4000;top:78px;left:50%;transform:translateX(-50%);
+  background:#161c28;border:1px solid var(--panel-border);border-radius:12px;padding:14px 16px;
+  box-shadow:0 14px 44px rgba(0,0,0,.65);max-width:min(520px,94vw);font-size:13px}
+#permPrompt.open{display:block}
+#permPrompt .pp-text{margin-bottom:12px;line-height:1.5}
+#permPrompt .pp-origin{color:var(--accent);font-weight:600;word-break:break-all}
+#permPrompt .pp-actions{display:flex;gap:8px;justify-content:flex-end}
+
+/* ── Seite durchsuchen ── */
+#findBar{display:none;position:fixed;z-index:3500;top:78px;right:18px;background:#161c28;
+  border:1px solid var(--panel-border);border-radius:10px;padding:6px 8px;align-items:center;gap:6px;
+  box-shadow:0 10px 30px rgba(0,0,0,.55)}
+#findBar.open{display:flex}
+#findInput{background:rgba(255,255,255,.05);border:1px solid var(--panel-border);border-radius:6px;
+  color:var(--text);padding:5px 9px;font-size:13px;width:210px;outline:none}
+#findInput:focus{border-color:var(--accent)}
+#findCount{font-size:11px;color:var(--muted);min-width:52px;text-align:center;white-space:nowrap}
+.find-btn{background:none;border:none;color:var(--text);cursor:pointer;padding:4px 7px;border-radius:5px;font-size:13px;line-height:1}
+.find-btn:hover{background:rgba(255,255,255,.09)}
+.find-btn:disabled{opacity:.3;cursor:default}
+
+/* ── Zoom-Anzeige ── */
+#zoomBadge{display:none;position:fixed;z-index:3400;bottom:18px;left:50%;transform:translateX(-50%);
+  background:#161c28;border:1px solid var(--panel-border);border-radius:999px;padding:6px 14px;
+  font-size:12px;color:var(--text);box-shadow:0 8px 24px rgba(0,0,0,.5);align-items:center;gap:10px}
+#zoomBadge.open{display:flex}
+
+/* ── Erweiterungen ── */
+#extBar{display:flex;align-items:center;gap:2px}
+.ext-icon{width:28px;height:28px;border:none;background:none;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;transition:background .12s;position:relative}
+.ext-icon:hover{background:rgba(255,255,255,.09)}
+.ext-icon img{width:17px;height:17px;object-fit:contain}
+.ext-icon.no-icon{font-size:11px;font-weight:700;color:var(--accent)}
+.ext-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--panel-border)}
+.ext-item-icon{width:32px;height:32px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);border-radius:8px}
+.ext-item-icon img{width:24px;height:24px;object-fit:contain}
+.ext-item-info{flex:1;min-width:0}
+.ext-item-name{font-size:13px;font-weight:500;display:flex;align-items:center;gap:7px}
+.ext-item-desc{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.ext-badge{font-size:9px;text-transform:uppercase;letter-spacing:.5px;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,.08);color:var(--muted);font-weight:600}
+.ext-badge.builtin{background:rgba(255,159,28,.14);color:var(--accent)}
+.ext-badge.err{background:rgba(239,68,68,.15);color:var(--danger)}
+.ext-actions{display:flex;gap:5px;align-items:center;flex-shrink:0}
+.ext-switch{width:36px;height:20px;border-radius:999px;background:rgba(255,255,255,.14);border:none;cursor:pointer;position:relative;transition:background .15s;flex-shrink:0}
+.ext-switch::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .15s}
+.ext-switch.on{background:var(--accent)}
+.ext-switch.on::after{transform:translateX(16px)}
+
+/* ── UI Builder — Live Edit Mode ── */
+#uiEditBar{display:none;position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:999999;
+  background:#0d1520;border:1.5px solid var(--accent);border-radius:999px;
+  padding:6px 8px 6px 18px;align-items:center;gap:10px;
+  box-shadow:0 8px 32px rgba(0,0,0,.7);font-size:12.5px;color:var(--text);
+  white-space:nowrap;pointer-events:auto}
+#uiEditBar.open{display:flex}
+#uiEditBar small{font-size:11px;opacity:.6}
+.ued-btn{padding:5px 14px;border:1px solid var(--panel-border);border-radius:999px;
+  background:rgba(255,255,255,.05);color:var(--text);font-size:12px;cursor:pointer;transition:background .12s}
+.ued-btn:hover{background:rgba(255,255,255,.12)}
+.ued-btn.primary{border-color:var(--accent);color:var(--accent);background:rgba(255,159,28,.1)}
+.ued-btn.primary:hover{background:rgba(255,159,28,.2)}
+
+/* Edit-Mode: Nav-Elemente visuell hervorheben */
+body.ui-edit-mode #navBar>*:not(#urlbarWrap){
+  outline:1.5px dashed rgba(255,159,28,.55);border-radius:8px;
+  cursor:grab !important;position:relative;transition:outline-color .15s,background .15s}
+body.ui-edit-mode #navBar>*:not(#urlbarWrap):hover{
+  outline-color:var(--accent);background:rgba(255,159,28,.1)}
+body.ui-edit-mode #navBar>*:not(#urlbarWrap)::after{
+  content:attr(data-edit-label);position:absolute;bottom:calc(100% + 4px);left:50%;
+  transform:translateX(-50%);background:#0d1520;border:1px solid var(--accent);
+  border-radius:5px;padding:2px 7px;font-size:10px;color:var(--accent);
+  white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s}
+body.ui-edit-mode #navBar>*:not(#urlbarWrap):hover::after{opacity:1}
+body.ui-edit-mode #navBar #urlbarWrap{
+  outline:1px dashed rgba(255,255,255,.18);border-radius:8px;cursor:default}
+body.ui-edit-mode #navBar>*[draggable]:active{cursor:grabbing !important}
+body.ui-edit-mode .ui-dragging{opacity:.35 !important;outline-style:solid !important}
+body.ui-edit-mode .ui-drag-over{
+  outline:2px solid var(--accent) !important;background:rgba(255,159,28,.15) !important}
+body.ui-edit-mode .ui-btn-hidden{opacity:.25;outline-style:dotted !important}
+
+/* Tab-Zonen (Rand-Klick) */
+.ui-tab-zone{position:fixed;z-index:99998;display:none;background:rgba(255,159,28,.04);
+  border:1.5px dashed rgba(255,159,28,.25);align-items:center;justify-content:center;
+  transition:background .15s,border-color .15s,opacity .15s;cursor:pointer;opacity:.7}
+.ui-tab-zone:hover{background:rgba(255,159,28,.15);border-color:var(--accent);opacity:1}
+.ui-tab-zone.active-zone{border-style:solid;background:rgba(255,159,28,.1);border-color:var(--accent);opacity:1}
+body.ui-edit-mode .ui-tab-zone{display:flex}
+.ui-zone-lbl{font-size:10px;font-weight:600;color:var(--accent);
+  background:rgba(13,21,32,.9);padding:2px 6px;border-radius:4px;pointer-events:none;white-space:nowrap}
+#uiZoneLeft .ui-zone-lbl,#uiZoneRight .ui-zone-lbl{writing-mode:vertical-lr;transform:rotate(180deg);padding:6px 2px}
+
+/* ── UI Builder — Tab-Leiste Positionen ── */
+:root { --tab-sidebar-w: 190px; }
+
+/* UNTEN */
+body.tabs-bottom #tabBar {
+  position:fixed !important; bottom:0; top:auto; left:0; right:0; z-index:12;
+  background:var(--toolbar-panel,var(--panel)); border-top:1px solid var(--panel-border);
+  border-bottom:none; padding:4px 6px 0; min-height:36px; align-items:flex-start;
+}
+body.tabs-bottom #tabBar .tab { border-radius:8px 8px 0 0; border-bottom:none; }
+body.tabs-bottom #mainArea    { bottom:36px; }
+body.tabs-bottom.has-bookmarks #mainArea { bottom:36px; }
+
+/* LINKS */
+body.tabs-left #tabBar {
+  position:fixed !important; left:0; top:0; bottom:0; right:auto; z-index:12;
+  width:var(--tab-sidebar-w); flex-direction:column; align-items:stretch;
+  background:var(--toolbar-panel,var(--panel)); border-right:1px solid var(--panel-border);
+  border-bottom:none; padding:6px 4px; overflow-y:auto; overflow-x:hidden; min-height:0;
+  -webkit-app-region:drag;
+}
+body.tabs-left #tabBar .tab {
+  max-width:none; border-radius:8px; border:1px solid transparent; border-bottom:1px solid transparent;
+  -webkit-app-region:no-drag; margin-bottom:2px;
+}
+body.tabs-left #tabBar .tab.active { border-color:var(--panel-border); }
+body.tabs-left #tabBar #newTabBtn  { align-self:flex-start; -webkit-app-region:no-drag; }
+body.tabs-left #tabBar #winControls { margin-left:0; margin-top:auto; align-self:stretch; justify-content:center; -webkit-app-region:no-drag; padding-bottom:6px; }
+body.tabs-left  #toolbar,body.tabs-left  #bookmarksBar,body.tabs-left  #mainArea { left:var(--tab-sidebar-w); }
+
+/* RECHTS */
+body.tabs-right #tabBar {
+  position:fixed !important; right:0; left:auto; top:0; bottom:0; z-index:12;
+  width:var(--tab-sidebar-w); flex-direction:column; align-items:stretch;
+  background:var(--toolbar-panel,var(--panel)); border-left:1px solid var(--panel-border);
+  border-bottom:none; padding:6px 4px; overflow-y:auto; overflow-x:hidden; min-height:0;
+  -webkit-app-region:drag;
+}
+body.tabs-right #tabBar .tab {
+  max-width:none; border-radius:8px; border:1px solid transparent; border-bottom:1px solid transparent;
+  -webkit-app-region:no-drag; margin-bottom:2px;
+}
+body.tabs-right #tabBar .tab.active { border-color:var(--panel-border); }
+body.tabs-right #tabBar #newTabBtn  { align-self:flex-start; -webkit-app-region:no-drag; }
+body.tabs-right #tabBar #winControls { margin-left:0; margin-top:auto; align-self:stretch; justify-content:center; -webkit-app-region:no-drag; padding-bottom:6px; }
+body.tabs-right #toolbar,body.tabs-right #bookmarksBar,body.tabs-right #mainArea { right:var(--tab-sidebar-w); }
+
+/* ── UI Builder — Layout-Settings-UI ── */
+.tabpos-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:4px}
+.tabpos-card{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;
+  padding:10px 4px;border:1px solid var(--panel-border);border-radius:8px;cursor:pointer;
+  color:var(--muted);font-size:11px;transition:all .15s;background:rgba(255,255,255,.02)}
+.tabpos-card:hover{background:rgba(255,255,255,.06);color:var(--text)}
+.tabpos-card.active{border-color:var(--accent);color:var(--accent);background:rgba(255,159,28,.08)}
+.nav-order-list{display:flex;flex-direction:column;gap:2px}
+.nav-order-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid rgba(255,255,255,.06);
+  border-radius:7px;background:rgba(255,255,255,.03);user-select:none;transition:background .1s;cursor:default}
+.nav-order-row[draggable=true]{cursor:grab}
+.nav-order-row[draggable=true]:active{cursor:grabbing}
+.nav-order-row.dragging{opacity:.4}
+.nav-order-row.drag-over{border-color:var(--accent);background:rgba(255,159,28,.07)}
+.nav-order-hidden{opacity:.38}
+.nav-order-handle{color:var(--muted);font-size:14px;flex-shrink:0;letter-spacing:-1px}
+.nav-order-icon{flex-shrink:0;width:18px;text-align:center;font-size:13px}
+.nav-order-label{flex:1;font-size:13px;color:var(--text)}
+.nav-order-eye{background:none;border:none;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:5px;flex-shrink:0;transition:background .1s,color .1s}
+.nav-order-eye:hover:not(:disabled){background:rgba(255,255,255,.08);color:var(--text)}
+.nav-order-eye:disabled{opacity:.3;cursor:default}
+
+/* ── Design-Tools ── */
+#fontPanel{display:none;position:fixed;z-index:3600;background:#0f1724;border:1px solid var(--panel-border);
+  border-radius:12px;padding:14px 16px;min-width:240px;max-width:320px;
+  box-shadow:0 12px 40px rgba(0,0,0,.65);font-size:12px}
+#fontPanel.open{display:block}
+.fp-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.fp-tag{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+  background:rgba(255,159,28,.12);color:var(--accent);border-radius:4px;padding:2px 7px}
+.fp-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0 4px;border-radius:4px}
+.fp-close:hover{color:var(--text);background:rgba(255,255,255,.08)}
+.fp-row{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.fp-row:last-child{border-bottom:none}
+.fp-key{color:var(--muted);min-width:88px;flex-shrink:0;font-size:11px}
+.fp-val{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.fp-copy{background:none;border:none;color:var(--muted);cursor:pointer;padding:1px 4px;border-radius:3px;font-size:11px;flex-shrink:0}
+.fp-copy:hover{color:var(--text);background:rgba(255,255,255,.08)}
+.fp-swatch{width:13px;height:13px;border-radius:3px;border:1px solid rgba(255,255,255,.2);flex-shrink:0}
+
+/* ── Gerätevorschau ── */
+#content.device-preview{display:flex;overflow:auto;padding:52px 24px 28px;background:radial-gradient(circle at 50% 30%,#111827 0%,#070b10 70%)}
+#content.device-preview>webview.active,#content.device-preview>.newtab-page.active{
+  /* Webviews sind normalerweise position:absolute (inset 0) — dadurch ignorieren
+     sie jede Flex-Zentrierung und kleben links oben. In der Gerätevorschau
+     müssen sie zurück in den normalen Fluss, damit margin:auto sie mittig legt.
+     margin:auto statt justify-content/align-items: zentriert auf beiden Achsen
+     UND schneidet bei zu großen Geräten den überstehenden Rand nicht ab. */
+  position:relative;top:auto;left:auto;right:auto;bottom:auto;
+  width:var(--dv-w);height:var(--dv-h);min-width:var(--dv-w);min-height:var(--dv-h);
+  flex-shrink:0;margin:auto;border-radius:18px;
+  box-shadow:0 0 0 14px #111827,0 0 0 16px #1e2a3a,0 30px 80px rgba(0,0,0,.8);
+}
+/* Kein CSS-transition auf width/height: <webview> ist eine eigene Guest-
+   Renderer-Instanz, jeder animierte Zwischenschritt löst dort ein echtes,
+   teures natives Resize aus (spürbares Ruckeln/Hängen). Direkter Sprung statt
+   Animation. */
+#dvExitBar{display:none;position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:2500;
+  background:#0f1520;border:1px solid var(--panel-border);border-radius:999px;padding:6px 8px 6px 14px;
+  align-items:center;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,.5);font-size:12px;color:var(--text)}
+#dvExitBar.open{display:flex}
+#dvExitBar button{background:rgba(255,159,28,.12);border:1px solid var(--accent);color:var(--accent);
+  border-radius:999px;padding:4px 12px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px}
+#dvExitBar button:hover{background:rgba(255,159,28,.22)}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- ── Toolbar ── -->
+  <div id="toolbar">
+    <!-- Tab bar -->
+    <div id="tabBar">
+      <button id="newTabBtn"><i data-lucide="plus" width="14" height="14"></i></button>
+      <div id="winControls">
+        <button class="win-btn" onclick="window.electronAPI&&window.electronAPI.winMinimize()"><i data-lucide="minus" width="13" height="13"></i></button>
+        <button class="win-btn" onclick="window.electronAPI&&window.electronAPI.winMaximize()"><i data-lucide="square" width="13" height="13"></i></button>
+        <button class="win-btn close" onclick="window.electronAPI&&window.electronAPI.winClose()"><i data-lucide="x" width="13" height="13"></i></button>
+      </div>
+    </div>
+    <!-- Nav bar -->
+    <div id="navBar">
+      <button class="nav-btn" id="btnBack" title="Zurück" data-i18n-title="back"><i data-lucide="arrow-left" width="16" height="16"></i></button>
+      <button class="nav-btn" id="btnFwd" title="Vorwärts" data-i18n-title="forward"><i data-lucide="arrow-right" width="16" height="16"></i></button>
+      <button class="nav-btn" id="btnReload" title="Neu laden" data-i18n-title="reload"><i data-lucide="rotate-cw" width="15" height="15"></i></button>
+      <button class="nav-btn" id="btnHome" title="Startseite" data-i18n-title="home"><i data-lucide="home" width="15" height="15"></i></button>
+      <span id="secBadge"><i data-lucide="lock" width="14" height="14"></i></span>
+      <div id="urlbarWrap" style="position:relative;flex:1">
+        <input id="urlbar" type="text" placeholder="URL eingeben oder suchen …" spellcheck="false" autocomplete="off" style="width:100%" data-i18n="searchPlaceholder"/>
+        <button id="btnMic" title="Spracheingabe (Mikrofon)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="9" y1="22" x2="15" y2="22"/></svg></button>
+        <div id="urlSuggestions" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:#161c28;border:1px solid var(--panel-border);border-radius:8px;overflow:hidden;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,.5)"></div>
+      </div>
+      <button class="nav-btn" id="btnBookmark" title="Lesezeichen" data-i18n-title="bookmarks"><i data-lucide="bookmark" width="15" height="15"></i></button>
+      <button class="nav-btn" id="btnHistory" title="Verlauf" data-i18n-title="history"><i data-lucide="clock" width="15" height="15"></i></button>
+      <button class="nav-btn" id="btnDownloads" title="Downloads" style="position:relative">
+        <i data-lucide="download" width="15" height="15"></i>
+        <span id="dlBadge" style="display:none;position:absolute;top:-2px;right:-2px;width:8px;height:8px;border-radius:50%;background:var(--accent2)"></span>
+      </button>
+      <button class="nav-btn" id="btnPasswords" title="Passwörter" data-i18n-title="passwords"><i data-lucide="key-round" width="15" height="15"></i></button>
+      <button class="nav-btn" id="btnAI" title="AI Assistent" data-i18n-title="aiAssistant"><i data-lucide="bot" width="15" height="15"></i></button>
+      <span id="extBar"></span>
+      <button class="nav-btn" id="btnAdBlock" title="Werbeblocker aktiv" style="position:relative">
+        <i data-lucide="shield" width="15" height="15"></i>
+      </button>
+      <button class="nav-btn" id="btnExtensions" title="Erweiterungen"><i data-lucide="puzzle" width="15" height="15"></i></button>
+      <button class="nav-btn" id="btnSettings" title="Einstellungen"><i data-lucide="settings" width="15" height="15"></i></button>
+      <!-- Win-Controls-Duplikat für tabs-bottom (normalerweise unsichtbar) -->
+      <div id="winControlsNav" style="display:none;align-items:center;gap:2px;margin-left:auto;flex-shrink:0;padding-right:4px;-webkit-app-region:no-drag">
+        <button class="win-btn" onclick="window.electronAPI&&window.electronAPI.winMinimize()"><i data-lucide="minus" width="13" height="13"></i></button>
+        <button class="win-btn" onclick="window.electronAPI&&window.electronAPI.winMaximize()"><i data-lucide="square" width="13" height="13"></i></button>
+        <button class="win-btn close" onclick="window.electronAPI&&window.electronAPI.winClose()"><i data-lucide="x" width="13" height="13"></i></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bookmarks bar -->
+  <div id="bookmarksBar"></div>
+
+  <!-- Main area: content + AI sidebar -->
+  <div id="mainArea">
+    <div id="content"></div>
+
+    <!-- AI Sidebar (inline, toggleable) -->
+    <div id="aiSidebar">
+      <div class="ai-header">
+        <span class="ai-header-title">🥔 AI Assistent</span>
+        <button class="nav-btn" id="aiSidebar-detach" title="In Fenster öffnen"><i data-lucide="external-link" width="13" height="13"></i></button>
+        <button class="nav-btn" id="aiSidebar-close" title="Schließen"><i data-lucide="x" width="13" height="13"></i></button>
+      </div>
+      <div class="ai-ctx-bar">
+        <span style="color:var(--muted);font-size:11px">Tab:</span>
+        <span id="aiCtxUrl">—</span>
+        <button class="s-btn" id="aiBtnSendCtx" style="font-size:11px;padding:2px 7px">📋 Kontext</button>
+        <button class="s-btn" id="aiBtnSysPrompt" style="font-size:11px;padding:2px 7px">🌐 Browser</button>
+      </div>
+      <div id="aiProviderTabs"></div>
+      <div id="aiWebviewContainer"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- Berechtigungs-Abfrage -->
+<div id="permPrompt">
+  <div class="pp-text"><span class="pp-origin" id="permOrigin"></span> möchte <span id="permLabel"></span> verwenden.</div>
+  <div class="pp-actions">
+    <button class="s-btn" id="permDeny">Blockieren</button>
+    <button class="s-btn primary" id="permAllow">Erlauben</button>
+  </div>
+</div>
+
+<!-- Seite durchsuchen -->
+<div id="findBar">
+  <input id="findInput" type="text" placeholder="Auf Seite suchen …" spellcheck="false" autocomplete="off"/>
+  <span id="findCount"></span>
+  <button class="find-btn" id="findPrev" title="Vorheriges (Shift+Enter)">▲</button>
+  <button class="find-btn" id="findNext" title="Nächstes (Enter)">▼</button>
+  <button class="find-btn" id="findClose" title="Schließen (Esc)">✕</button>
+</div>
+
+<!-- Zoom-Anzeige -->
+<div id="zoomBadge">
+  <span id="zoomLevel">100 %</span>
+  <button class="find-btn" id="zoomReset" title="Zurücksetzen (Strg+0)">Zurücksetzen</button>
+</div>
+
+<!-- Font Inspector Panel -->
+<div id="fontPanel">
+  <div class="fp-header">
+    <span class="fp-tag" id="fpTag">div</span>
+    <button class="fp-close" id="fpClose" title="Schließen">✕</button>
+  </div>
+  <div id="fpRows"></div>
+</div>
+
+<!-- Gerätevorschau: Exit-Leiste -->
+<div id="dvExitBar">
+  <span id="dvExitLabel">Gerätevorschau</span>
+  <button id="dvExitBtn"><i data-lucide="x" width="13" height="13"></i> Vorschau beenden (Esc)</button>
+</div>
+
+<!-- ── Settings Overlay ── -->
+<div class="overlay" id="settingsOverlay">
+  <div class="overlay-box" style="height:85vh">
+    <div class="overlay-header">
+      <span class="overlay-title">⚙️ <span data-i18n="settings">Einstellungen</span></span>
+      <button class="overlay-close" id="closeSettingsBtn"><i data-lucide="x" width="15" height="15"></i></button>
+    </div>
+    <div class="s-layout">
+      <!-- Nav -->
+      <div class="s-nav">
+        <div class="snav-item active" data-page="appearance"><i data-lucide="palette" width="14" height="14"></i><span data-i18n="appearance">Darstellung</span></div>
+        <div class="snav-item" data-page="layout"><i data-lucide="layout-dashboard" width="14" height="14"></i><span>Layout</span></div>
+        <div class="snav-item" data-page="browser"><i data-lucide="globe" width="14" height="14"></i><span data-i18n="general">Browser</span></div>
+        <div class="snav-item" data-page="ai"><i data-lucide="bot" width="14" height="14"></i><span data-i18n="aiSidebar">AI</span></div>
+        <div class="snav-item" data-page="privacy"><i data-lucide="shield" width="14" height="14"></i><span data-i18n="privacy">Datenschutz</span></div>
+        <div class="snav-item" data-page="about"><i data-lucide="info" width="14" height="14"></i><span data-i18n="about">Info</span></div>
+      </div>
+      <!-- Content -->
+      <div class="s-content">
+
+        <!-- Appearance -->
+        <div class="s-page active" id="s-appearance">
+          <div class="s-section">
+            <div class="s-label">Theme</div>
+            <div class="chips">
+              <div class="theme-chip" data-theme="dark">🌙 Dunkel</div>
+              <div class="theme-chip" data-theme="light">☀️ Hell</div>
+            </div>
+          </div>
+          <div class="s-section">
+            <div class="s-label">Farben</div>
+            <div class="color-row"><div class="color-swatch" id="swatchAccent"></div><span class="color-label">Akzentfarbe</span><input type="color" id="pickerAccent" class="s-input" style="width:48px;height:28px;padding:2px"/></div>
+            <div class="color-row"><div class="color-swatch" id="swatchAccent2"></div><span class="color-label">Akzent 2</span><input type="color" id="pickerAccent2" class="s-input" style="width:48px;height:28px;padding:2px"/></div>
+            <div class="color-row"><div class="color-swatch" id="swatchDanger"></div><span class="color-label">Gefahrenfarbe</span><input type="color" id="pickerDanger" class="s-input" style="width:48px;height:28px;padding:2px"/></div>
+            <div class="color-row"><div class="color-swatch" id="swatchPanel"></div><span class="color-label">Panel-Farbe</span><input type="color" id="pickerPanel" class="s-input" style="width:48px;height:28px;padding:2px"/></div>
+            <div class="color-row"><div class="color-swatch" id="swatchText"></div><span class="color-label">Textfarbe</span><input type="color" id="pickerText" class="s-input" style="width:48px;height:28px;padding:2px"/></div>
+          </div>
+          <div class="s-section">
+            <div class="s-label">Eckenradius</div>
+            <div class="slider-row"><input type="range" id="radiusSlider" min="0" max="24" step="1"/><span class="slider-val" id="radiusVal">12px</span></div>
+          </div>
+          <div class="s-section">
+            <div class="s-label">Transparenz</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:.3rem">Panel &amp; Overlays</div>
+            <div class="slider-row"><input type="range" id="panelOpacitySlider" min="0" max="100" step="1"/><span class="slider-val" id="panelOpacityVal">92%</span></div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:.3rem;margin-top:.6rem">Toolbar</div>
+            <div class="slider-row"><input type="range" id="toolbarOpacitySlider" min="0" max="100" step="1"/><span class="slider-val" id="toolbarOpacityVal">92%</span></div>
+          </div>
+          <div class="s-section">
+            <div class="s-label">Hintergrund</div>
+            <div class="chips" style="margin-bottom:.8rem">
+              <div class="bg-opt active" data-bgtype="color">Farbe</div>
+              <div class="bg-opt" data-bgtype="gradient">Verlauf</div>
+              <div class="bg-opt" data-bgtype="image">Bild-URL</div>
+              <div class="bg-opt" data-bgtype="localimage">Lokal</div>
+              <div class="bg-opt" data-bgtype="solid">Einfarbig</div>
+            </div>
+            <!-- Farbe (radial) -->
+            <div id="bgColorSection" class="bg-section">
+              <div class="color-row"><div class="color-swatch" id="swatchBg"></div><span class="color-label">Grundfarbe</span><input type="color" id="pickerBg" class="s-input" style="width:48px;height:28px;padding:2px"/></div>
+              <div class="color-row"><div class="color-swatch" id="swatchGrad1"></div><span class="color-label">Highlight</span><input type="color" id="pickerGrad1" class="s-input" style="width:48px;height:28px;padding:2px"/></div>
+            </div>
+            <!-- Verlauf -->
+            <div id="bgGradientSection" class="bg-section hidden">
+              <div class="s-row" style="margin-bottom:.5rem"><span class="color-label">Richtung</span><select class="s-select" id="gradDir"><option value="to bottom">Oben → Unten</option><option value="to right">Links → Rechts</option><option value="radial">Radial</option></select></div>
+              <div class="color-row"><div class="color-swatch" id="swatchGrad1b"></div><span class="color-label">Farbe 1</span><input type="color" id="pickerGrad1b" class="s-input" style="width:48px;height:28px;padding:2px"/></div>
+              <div class="color-row"><div class="color-swatch" id="swatchGrad2b"></div><span class="color-label">Farbe 2</span><input type="color" id="pickerGrad2b" class="s-input" style="width:48px;height:28px;padding:2px"/></div>
+            </div>
+            <!-- Bild-URL -->
+            <div id="bgImageSection" class="bg-section hidden">
+              <input class="s-input" id="bgImageUrl" placeholder="https://…" style="width:100%;margin-bottom:.5rem"/>
+              <div class="s-row">
+                <select class="s-select" id="bgSize"><option value="cover">Cover</option><option value="contain">Contain</option><option value="auto">Auto</option></select>
+                <select class="s-select" id="bgPos"><option value="center">Zentriert</option><option value="top">Oben</option><option value="bottom">Unten</option></select>
+              </div>
+            </div>
+            <!-- Lokal vom PC -->
+            <div id="bgLocalImageSection" class="bg-section hidden">
+              <button class="s-btn" id="btnPickLocalBg" style="width:100%;margin-bottom:.5rem">&#128193; Bild vom PC w&#228;hlen&#8230;</button>
+              <div id="localBgName" style="font-size:11px;color:var(--muted);margin-bottom:.5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+              <div class="s-row">
+                <select class="s-select" id="bgSizeLocal"><option value="cover">Cover</option><option value="contain">Contain</option><option value="auto">Auto</option></select>
+                <select class="s-select" id="bgPosLocal"><option value="center">Zentriert</option><option value="top">Oben</option><option value="bottom">Unten</option></select>
+              </div>
+            </div>
+            <!-- Einfarbig -->
+            <div id="bgSolidSection" class="bg-section hidden">
+              <div class="color-row"><div class="color-swatch" id="swatchSolid"></div><span class="color-label">Farbe</span><input type="color" id="pickerSolid" class="s-input" style="width:48px;height:28px;padding:2px"/></div>
+            </div>
+          </div>
+          <div class="s-section">
+            <div class="s-label">Schrift</div>
+            <div class="s-row">
+              <select class="s-select" id="fontFamily" style="flex:1">
+                <option value="Inter, system-ui, sans-serif">Inter</option>
+                <option value="'Segoe UI', sans-serif">Segoe UI</option>
+                <option value="system-ui, sans-serif">System</option>
+                <option value="custom">Benutzerdefiniert</option>
+              </select>
+              <select class="s-select" id="fontSize">
+                <option value="13px">13px</option><option value="14px">14px</option><option value="15px" selected>15px</option><option value="16px">16px</option>
+              </select>
+            </div>
+            <input class="s-input" id="customFontInput" placeholder="Benutzerdefinierte Schrift" style="width:100%;margin-top:.4rem"/>
+          </div>
+          <div class="s-section">
+            <div class="s-label">Layout</div>
+            <div style="margin-bottom:.5rem;font-size:12px;color:var(--muted)">Toolbar-Position</div>
+            <div class="chips" style="margin-bottom:.8rem">
+              <div class="layout-opt selected" data-layout-key="toolbarPos" data-layout-val="top">Oben</div>
+              <div class="layout-opt" data-layout-key="toolbarPos" data-layout-val="bottom">Unten</div>
+            </div>
+            <div style="margin-bottom:.5rem;font-size:12px;color:var(--muted)">Tab-Position</div>
+            <div class="chips" style="margin-bottom:.8rem">
+              <div class="layout-opt selected" data-layout-key="tabPos" data-layout-val="top">Oben</div>
+              <div class="layout-opt" data-layout-key="tabPos" data-layout-val="bottom">Unten</div>
+            </div>
+            <div style="margin-bottom:.5rem;font-size:12px;color:var(--muted)">Tab-Stil</div>
+            <div class="chips">
+              <div class="layout-opt selected" data-layout-key="tabStyle" data-layout-val="modern">Modern</div>
+              <div class="layout-opt" data-layout-key="tabStyle" data-layout-val="compact">Kompakt</div>
+              <div class="layout-opt" data-layout-key="tabStyle" data-layout-val="pill">Pill</div>
+              <div class="layout-opt" data-layout-key="tabStyle" data-layout-val="icon">Icon</div>
+            </div>
+          </div>
+          <div class="s-section">
+            <div class="s-label">Buttons anzeigen</div>
+            <div class="toggle-row"><div><div class="toggle-label">Zurück/Vorwärts</div></div><label class="s-toggle"><input type="checkbox" id="showBackFwd"/><span class="s-toggle-track"></span></label></div>
+            <div class="toggle-row"><div><div class="toggle-label">Neu laden</div></div><label class="s-toggle"><input type="checkbox" id="showReload"/><span class="s-toggle-track"></span></label></div>
+            <div class="toggle-row"><div><div class="toggle-label">Startseite</div></div><label class="s-toggle"><input type="checkbox" id="showHome"/><span class="s-toggle-track"></span></label></div>
+            <div class="toggle-row"><div><div class="toggle-label">HTTPS-Badge</div></div><label class="s-toggle"><input type="checkbox" id="showBadge"/><span class="s-toggle-track"></span></label></div>
+            <div class="toggle-row"><div><div class="toggle-label">Verlaufs-Button</div></div><label class="s-toggle"><input type="checkbox" id="showHistoryBtn"/><span class="s-toggle-track"></span></label></div>
+            <div class="toggle-row"><div><div class="toggle-label">Passwort-Button</div></div><label class="s-toggle"><input type="checkbox" id="showPwBtn"/><span class="s-toggle-track"></span></label></div>
+            <div class="toggle-row"><div><div class="toggle-label">AI-Button</div></div><label class="s-toggle"><input type="checkbox" id="showAiBtn"/><span class="s-toggle-track"></span></label></div>
+          </div>
+        </div>
+
+        <!-- Layout -->
+        <div class="s-page" id="s-layout">
+          <!-- Wird dynamisch von buildLayoutSettingsUI() befüllt -->
+        </div>
+
+        <!-- Browser -->
+        <div class="s-page" id="s-browser">
+          <div class="s-section">
+            <div class="s-label" data-i18n="language">Sprache</div>
+            <select class="s-select" id="uiLanguage" style="width:100%"></select>
+          </div>
+          <div class="s-section">
+            <div class="s-label">Browser-Name</div>
+            <input class="s-input" id="browserName" style="width:100%" placeholder="Kartoffel Puffer"/>
+            <input class="s-input" id="browserSubtitle" style="width:100%;margin-top:.5rem" placeholder="Untertitel"/>
+          </div>
+          <div class="s-section">
+            <div class="s-label">Startseite</div>
+            <input class="s-input" id="homeUrl" style="width:100%" placeholder="newtab oder https://…"/>
+          </div>
+          <div class="s-section">
+            <div class="toggle-row"><div><div class="toggle-label">Tabs beim Start wiederherstellen</div></div><label class="s-toggle"><input type="checkbox" id="restoreSession"/><span class="s-toggle-track"></span></label></div>
+          </div>
+          <div class="s-section">
+            <div class="s-label">Suchmaschine</div>
+            <select class="s-select" id="searchEngine" style="width:100%">
+              <option value="https://www.google.com/search?q=">Google</option>
+              <option value="https://www.bing.com/search?q=">Bing</option>
+              <option value="https://duckduckgo.com/?q=">DuckDuckGo</option>
+              <option value="custom">Benutzerdefiniert</option>
+            </select>
+            <input class="s-input" id="customSearchUrl" style="width:100%;margin-top:.5rem" placeholder="https://suche.de/?q="/>
+          </div>
+          <div class="s-section">
+            <div class="s-label">Schnelllinks</div>
+            <div id="quickLinksList"></div>
+            <button class="s-btn primary" id="addQuickLink" style="margin-top:.5rem">+ Link hinzufügen</button>
+          </div>
+          <div class="s-section">
+            <div class="s-label">🎙 Spracheingabe</div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:.5rem">
+              Kostenloser Groq API-Key (<a href="https://console.groq.com/keys" style="color:var(--accent2)" onclick="createTab(this.href);return false">console.groq.com/keys</a> → API Keys → Create — kein Billing nötig)
+            </div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input class="s-input" id="speechApiKeyInput" type="password" placeholder="gsk_…" style="flex:1" autocomplete="off" spellcheck="false"/>
+              <button class="s-btn" id="speechApiKeyToggle" style="flex-shrink:0">👁</button>
+            </div>
+          </div>
+          <div class="s-section">
+            <div class="s-label">Verlauf</div>
+            <button class="s-btn danger" id="clearHistoryBtn">Verlauf löschen</button>
+          </div>
+          <div class="s-section">
+            <div class="s-label">Zurücksetzen</div>
+            <button class="s-btn danger" id="resetSettings">Alle Einstellungen zurücksetzen</button>
+          </div>
+        </div>
+
+        <!-- AI -->
+        <div class="s-page" id="s-ai">
+          <div class="s-section">
+            <div class="s-label">AI-Sidebar Position</div>
+            <div class="chips">
+              <div class="layout-opt selected" data-layout-key="aiSidebarPos" data-layout-val="right">Rechts</div>
+              <div class="layout-opt" data-layout-key="aiSidebarPos" data-layout-val="left">Links</div>
+            </div>
+          </div>
+          <div class="s-section">
+            <div class="s-label">Sidebar-Breite</div>
+            <div class="slider-row"><input type="range" id="sidebarWidthSlider" min="260" max="600" step="10"/><span class="slider-val" id="sidebarWidthLabel">360px</span></div>
+          </div>
+          <div class="s-section">
+            <div class="toggle-row">
+              <div><div class="toggle-label">Auto-Kontext senden</div><div class="toggle-desc">Seiten-URL automatisch an AI schicken</div></div>
+              <label class="s-toggle"><input type="checkbox" id="aiAutoCtx"/><span class="s-toggle-track"></span></label>
+            </div>
+          </div>
+          <div class="s-section">
+            <div class="s-label">AI-Anbieter</div>
+            <div id="aiProviderSettingsList"></div>
+          </div>
+        </div>
+
+        <!-- Privacy -->
+        <div class="s-page" id="s-privacy">
+          <div class="s-section">
+            <div class="toggle-row">
+              <div><div class="toggle-label">Browserdaten löschen</div>
+                <div style="font-size:11px;color:var(--muted)">Cookies, Cache, Website-Daten und Verlauf</div></div>
+              <button class="s-btn danger" id="openClearDataBtn">Löschen …</button>
+            </div>
+            <div class="toggle-row">
+              <div><div class="toggle-label">Website-Berechtigungen</div>
+                <div style="font-size:11px;color:var(--muted)" id="permCountLabel">Kamera, Mikrofon, Standort, Benachrichtigungen</div></div>
+              <button class="s-btn" id="resetPermsBtn">Verwalten …</button>
+            </div>
+            <div class="toggle-row"><div><div class="toggle-label">Werbung blockieren</div></div><label class="s-toggle"><input type="checkbox" id="adblock"/><span class="s-toggle-track"></span></label></div>
+            <div class="toggle-row"><div><div class="toggle-label">Tracker blockieren</div></div><label class="s-toggle"><input type="checkbox" id="trackerblock"/><span class="s-toggle-track"></span></label></div>
+            <div class="toggle-row"><div><div class="toggle-label">Cookies beim Schließen löschen</div></div><label class="s-toggle"><input type="checkbox" id="clearCookies"/><span class="s-toggle-track"></span></label></div>
+            <div class="toggle-row"><div><div class="toggle-label">Verlauf speichern</div></div><label class="s-toggle"><input type="checkbox" id="saveHistory"/><span class="s-toggle-track"></span></label></div>
+            <div class="toggle-row"><div><div class="toggle-label">Autofill</div></div><label class="s-toggle"><input type="checkbox" id="autofill"/><span class="s-toggle-track"></span></label></div>
+            <div class="toggle-row"><div><div class="toggle-label">Speichern fragen</div></div><label class="s-toggle"><input type="checkbox" id="askSave"/><span class="s-toggle-track"></span></label></div>
+            <div class="toggle-row"><div><div class="toggle-label">Popups erlauben</div></div><label class="s-toggle"><input type="checkbox" id="allowPopups"/><span class="s-toggle-track"></span></label></div>
+            <div class="toggle-row"><div><div class="toggle-label">JavaScript aktiviert</div></div><label class="s-toggle"><input type="checkbox" id="enableJS"/><span class="s-toggle-track"></span></label></div>
+            <div class="toggle-row"><div><div class="toggle-label">Bilder laden</div></div><label class="s-toggle"><input type="checkbox" id="loadImages"/><span class="s-toggle-track"></span></label></div>
+          </div>
+        </div>
+
+        <!-- About -->
+        <div class="s-page" id="s-about">
+          <div class="s-section" style="text-align:center;padding:2rem 0">
+            <div style="font-size:3rem;margin-bottom:.5rem">🥔</div>
+            <div style="font-size:1.2rem;font-weight:600;margin-bottom:.3rem">Kartoffel Puffer</div>
+            <div style="color:var(--muted);font-size:13px">Electron-basierter Browser</div>
+            <div style="color:var(--muted);font-size:12px;margin-top:.5rem">Version 1.0 · Electron</div>
+          </div>
+          <div class="s-section">
+            <div class="s-label">Updates</div>
+            <div id="updateStatusText" style="font-size:13px;color:var(--muted);margin-bottom:.7rem">Noch nicht geprüft</div>
+            <button class="s-btn primary" id="btnCheckUpdate" style="width:100%">Nach Updates suchen</button>
+            <button class="s-btn primary" id="btnInstallUpdate" style="width:100%;margin-top:.5rem;display:none">Update installieren &amp; neu starten</button>
+          </div>
+        </div>
+
+      </div><!-- /s-content -->
+    </div><!-- /s-layout -->
+  </div>
+</div>
+
+<!-- ── History Overlay ── -->
+<div class="overlay" id="historyOverlay">
+  <div class="overlay-box" style="width:min(640px,95vw)">
+    <div class="overlay-header">
+      <span class="overlay-title">🕐 <span data-i18n="history">Verlauf</span></span>
+      <button class="overlay-close" id="closeHistory"><i data-lucide="x" width="15" height="15"></i></button>
+    </div>
+    <div style="padding:8px 14px;border-bottom:1px solid var(--panel-border);display:flex;gap:8px">
+      <input class="s-input" id="historySearch" placeholder="Verlauf durchsuchen …" style="flex:1" data-i18n="searchHistory"/>
+      <button class="s-btn danger" id="clearHistoryBtn2" data-i18n="clearHistory">Alles löschen</button>
+    </div>
+    <div id="historyList" style="overflow-y:auto;flex:1"></div>
+  </div>
+</div>
+
+<!-- ── Downloads Overlay ── -->
+<div class="overlay" id="downloadsOverlay">
+  <div class="overlay-box" style="width:min(560px,95vw)">
+    <div class="overlay-header">
+      <span class="overlay-title">⬇ Downloads</span>
+      <button class="overlay-close" id="closeDownloads"><i data-lucide="x" width="15" height="15"></i></button>
+    </div>
+    <div style="padding:8px 14px;border-bottom:1px solid var(--panel-border);display:flex;justify-content:flex-end">
+      <button class="s-btn danger" id="clearDownloadsBtn">Liste leeren</button>
+    </div>
+    <div id="downloadsList" style="overflow-y:auto;flex:1"></div>
+  </div>
+</div>
+
+<!-- ── Website-Berechtigungen Overlay ── -->
+<div class="overlay" id="permOverlay">
+  <div class="overlay-box" style="width:min(620px,95vw);height:min(80vh,700px)">
+    <div class="overlay-header">
+      <span class="overlay-title">🔐 Website-Berechtigungen</span>
+      <button class="overlay-close" id="closePermOverlay"><i data-lucide="x" width="15" height="15"></i></button>
+    </div>
+    <div style="padding:8px 14px;border-bottom:1px solid var(--panel-border)">
+      <input class="s-input" id="permFilter" placeholder="Websites filtern …" style="width:100%"/>
+    </div>
+    <div id="permList" style="overflow-y:auto;flex:1;padding-bottom:8px"></div>
+  </div>
+</div>
+
+<!-- ── Browserdaten löschen Overlay ── -->
+<div class="overlay" id="clearDataOverlay">
+  <div class="overlay-box" style="width:min(460px,95vw)">
+    <div class="overlay-header">
+      <span class="overlay-title">🧹 Browserdaten löschen</span>
+      <button class="overlay-close" id="closeClearData"><i data-lucide="x" width="15" height="15"></i></button>
+    </div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+      <label style="display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="cdHistory" checked> Verlauf <span style="color:var(--muted);font-size:11px">(Liste besuchter Seiten)</span></label>
+      <label style="display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="cdCookies" checked> Cookies &amp; Anmeldedaten <span style="color:var(--muted);font-size:11px">(du wirst überall abgemeldet)</span></label>
+      <label style="display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="cdCache" checked> Zwischengespeicherte Dateien</label>
+      <label style="display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="cdStorage"> Website-Daten <span style="color:var(--muted);font-size:11px">(localStorage, IndexedDB, Service Worker)</span></label>
+      <label style="display:flex;align-items:center;gap:9px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="cdPerms"> Erteilte Berechtigungen zurücksetzen</label>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px">
+        <button class="s-btn" id="cdCancel">Abbrechen</button>
+        <button class="s-btn danger" id="cdConfirm">Jetzt löschen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Erweiterungen Overlay ── -->
+<div class="overlay" id="extOverlay">
+  <div class="overlay-box" style="width:min(620px,95vw)">
+    <div class="overlay-header">
+      <span class="overlay-title">🧩 Erweiterungen</span>
+      <button class="overlay-close" id="closeExtOverlay"><i data-lucide="x" width="15" height="15"></i></button>
+    </div>
+    <div style="padding:10px 14px;border-bottom:1px solid var(--panel-border);display:flex;gap:8px;align-items:center">
+      <button class="s-btn primary" id="extInstallBtn">＋ Entpackte Erweiterung laden</button>
+      <span style="font-size:11px;color:var(--muted)">Ordner mit <code>manifest.json</code> auswählen</span>
+    </div>
+    <div id="extList" style="overflow-y:auto;flex:1"></div>
+  </div>
+</div>
+
+<!-- ── Password Overlay ── -->
+<div class="overlay" id="pwOverlay">
+  <div class="overlay-box" style="width:min(560px,95vw)">
+    <div class="overlay-header">
+      <span class="overlay-title">🔑 <span data-i18n="passwords">Passwörter</span></span>
+      <button class="overlay-close" id="closePwOverlay"><i data-lucide="x" width="15" height="15"></i></button>
+    </div>
+    <div class="pw-tabs">
+      <button class="pw-tab active" id="pwTabList">Gespeicherte Logins</button>
+      <button class="pw-tab" id="pwTabAdd">Eintrag hinzufügen</button>
+    </div>
+    <div id="pwBox-body" style="overflow-y:auto;flex:1">
+      <!-- List view -->
+      <div id="pwViewList">
+        <div style="padding:8px 14px;border-bottom:1px solid var(--panel-border)">
+          <input class="s-input" id="pwSearch" placeholder="Suchen …" style="width:100%"/>
+        </div>
+        <div id="pwList"></div>
+      </div>
+      <!-- Add view -->
+      <div id="pwViewAdd" style="display:none;padding:16px">
+        <div class="s-section">
+          <div class="s-label">Website / Domain</div>
+          <input class="s-input" id="pwAddSite" placeholder="https://example.com" style="width:100%"/>
+        </div>
+        <div class="s-section">
+          <div class="s-label">Benutzername</div>
+          <input class="s-input" id="pwAddUser" placeholder="Benutzername oder E-Mail" style="width:100%"/>
+        </div>
+        <div class="s-section">
+          <div class="s-label">Passwort</div>
+          <input class="s-input" id="pwAddPass" type="password" placeholder="Passwort" style="width:100%"/>
+        </div>
+        <button class="s-btn primary" id="pwSaveBtn" style="width:100%;padding:8px">Speichern</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Master PW Overlay (kept for compatibility) ── -->
+<div class="overlay" id="masterPwOverlay">
+  <div class="overlay-box" style="width:min(400px,95vw)">
+    <div class="overlay-header">
+      <span class="overlay-title" id="masterPwTitle">Tresor entsperren</span>
+    </div>
+    <div style="padding:16px">
+      <p style="color:var(--muted);font-size:13px;margin-bottom:1rem" id="masterPwDesc">Master-Passwort eingeben.</p>
+      <input class="s-input" id="masterPwInput" type="password" placeholder="Master-Passwort" style="width:100%;margin-bottom:.5rem"/>
+      <input class="s-input" id="masterPwInput2" type="password" placeholder="Wiederholen" style="width:100%;margin-bottom:.5rem;display:none"/>
+      <div id="masterPwStrength" class="mpw-strength" style="display:none">
+        <div class="mpw-bar"></div><div class="mpw-bar"></div><div class="mpw-bar"></div><div class="mpw-bar"></div>
+      </div>
+      <p id="masterPwError" style="color:var(--danger);font-size:12px;margin-bottom:.5rem"></p>
+      <div style="display:flex;gap:8px;margin-top:.5rem">
+        <button class="s-btn" id="masterPwCancel" style="flex:1" data-i18n="cancel">Abbrechen</button>
+        <button class="s-btn primary" id="masterPwConfirm" style="flex:1" data-i18n="unlock">Entsperren</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/tabs.js"></script>
+<script src="js/ai-sidebar.js"></script>
+<script src="js/vault-ui.js"></script>
+<script src="js/device-preview.js"></script>
+<script src="js/extensions.js"></script>
+<script src="js/browser-basics.js"></script>
+
+<script>
+// ── Electron API bridge ──────────────────────────────────────────────────────
+const eAPI = window.electronAPI || {};
+const vault = {
+  isSetup:  ()          => eAPI.passwords?.isSetup?.()        || Promise.resolve(false),
+  isLocked: ()          => eAPI.passwords?.isLocked?.()       || Promise.resolve(true),
+  setup:    (pw)        => eAPI.passwords?.setup?.(pw)        || Promise.resolve({ok:true}),
+  list:   ()           => eAPI.passwords?.list?.()            || Promise.resolve([]),
+  save:   (entry)      => eAPI.passwords?.save?.(entry)       || Promise.resolve({ok:true}),
+  get:    (site)       => eAPI.passwords?.get?.(site)         || Promise.resolve(null),
+  delete: (site, user) => eAPI.passwords?.delete?.(site,user) || Promise.resolve({ok:true}),
+  remove: (site, user) => eAPI.passwords?.delete?.(site,user) || Promise.resolve({ok:true}),
+  unlock: (pw)         => eAPI.passwords?.unlock?.(pw)        || Promise.resolve({ok:true}),
+  lock:   ()           => eAPI.passwords?.lock?.()            || Promise.resolve({ok:true}),
+};
+
+function renderLucide() { try { lucide.createIcons(); } catch(e) {} }
+
+// ── Context menu ─────────────────────────────────────────────────────────────
+// Submenü-Hover NICHT über einzelne mouseenter/mouseleave-Events auf Parent-
+// Item bzw. Submenü lösen — diese "kanten"-basierte Logik hat immer wieder
+// ein Zeitfenster, in dem die Maus (z.B. beim Überqueren der Lücke zwischen
+// Item und Submenü, oder wenn sie kurz über ein anderes Menü-Item streift)
+// als "draußen" gilt, obwohl der Nutzer klar auf dem Weg zum Submenü ist.
+// Stattdessen: solange ein Submenü offen ist, bei JEDER Mausbewegung prüfen,
+// ob der Cursor aktuell (mit Toleranz-Puffer) über dem Parent-Item ODER dem
+// Submenü liegt. Nur wenn er das für die volle Verzögerung ununterbrochen
+// NICHT tut, schließt das Submenü. Das eliminiert die Race-Condition komplett,
+// weil es die tatsächliche Cursor-Position statt einzelner Enter/Leave-
+// Ereignisse auswertet.
+let _subHideTimer = null;
+let _subOwnerEl   = null; // has-sub Element, dessen Submenü gerade offen ist
+let _subWatchFn   = null;
+const SUB_HIDE_DELAY = 350;
+const SUB_HOVER_PAD  = 10; // px Toleranz um Parent-Item/Submenü herum
+
+function _stopSubWatch() {
+  clearTimeout(_subHideTimer);
+  _subHideTimer = null;
+  if (_subWatchFn) { document.removeEventListener('mousemove', _subWatchFn); _subWatchFn = null; }
+}
+function _closeSub() {
+  _stopSubWatch();
+  document.getElementById('_kpCtxSub')?.remove();
+  _subOwnerEl = null;
+}
+function hideCtxMenu() {
+  _stopSubWatch();
+  _subOwnerEl = null;
+  document.getElementById('_kpCtxMenu')?.remove();
+  document.getElementById('_kpCtxSub')?.remove();
+  document.getElementById('_kpCtxBackdrop')?.remove();
+  // Pointer-Events auf Webviews wieder freigeben (inline-style entfernen → CSS-Klasse greift wieder)
+  document.querySelectorAll('webview').forEach(wv => wv.style.pointerEvents = '');
+}
+window.addEventListener('blur', hideCtxMenu);
+function _openSub(parentEl, items) {
+  _stopSubWatch();
+  document.getElementById('_kpCtxSub')?.remove();
+  _subOwnerEl = parentEl;
+  const sub = _buildCtxMenu(items, '_kpCtxSub');
+  document.body.appendChild(sub);
+  const r = parentEl.getBoundingClientRect();
+  sub.style.left = (r.right + 2) + 'px'; sub.style.top = r.top + 'px';
+  const sr = sub.getBoundingClientRect();
+  if (sr.right  > window.innerWidth)  sub.style.left = (r.left - sr.width - 2) + 'px';
+  if (sr.bottom > window.innerHeight) sub.style.top  = (r.top  - sr.height + parentEl.offsetHeight) + 'px';
+
+  _subWatchFn = (ev) => {
+    const pr = parentEl.getBoundingClientRect();
+    const sr2 = sub.getBoundingClientRect();
+    const inside = (rc) =>
+      ev.clientX >= rc.left - SUB_HOVER_PAD && ev.clientX <= rc.right  + SUB_HOVER_PAD &&
+      ev.clientY >= rc.top  - SUB_HOVER_PAD && ev.clientY <= rc.bottom + SUB_HOVER_PAD;
+    if (inside(pr) || inside(sr2)) {
+      clearTimeout(_subHideTimer);
+      _subHideTimer = null;
+    } else if (!_subHideTimer) {
+      _subHideTimer = setTimeout(_closeSub, SUB_HIDE_DELAY);
+    }
+  };
+  document.addEventListener('mousemove', _subWatchFn);
+}
+function _buildCtxMenu(items, id) {
+  const menu = document.createElement('div');
+  menu.id = id;
+  items.forEach(item => {
+    if (item === '-') {
+      const sep = document.createElement('div'); sep.className = '_ctx-sep'; menu.appendChild(sep);
+    } else if (item.submenu) {
+      const el = document.createElement('div');
+      el.className = '_ctx-item has-sub' + (item.danger ? ' danger' : '');
+      el.innerHTML = `<span>${item.label}</span><span class="_ctx-arrow">›</span>`;
+      el.addEventListener('mouseenter', () => {
+        if (_subOwnerEl === el) { clearTimeout(_subHideTimer); _subHideTimer = null; return; }
+        _openSub(el, item.submenu);
+      });
+      menu.appendChild(el);
+    } else {
+      const el = document.createElement('div');
+      el.className = '_ctx-item' + (item.danger ? ' danger' : '') + (item.disabled ? ' disabled' : '');
+      // Bewusst per textContent statt innerHTML: in Labels steckt teilweise vom
+      // Nutzer markierter Seitentext ('Nach "…" suchen') — das darf kein HTML werden.
+      const lab = document.createElement('span');
+      lab.textContent = item.label;
+      el.appendChild(lab);
+      if (item.accel) {
+        const acc = document.createElement('span');
+        acc.className = '_ctx-accel';
+        acc.textContent = item.accel;
+        el.appendChild(acc);
+      }
+      if (!item.disabled) {
+        el.addEventListener('click', () => { hideCtxMenu(); item.click(); });
+      }
+      menu.appendChild(el);
+    }
+  });
+  return menu;
+}
+function showCtxMenu(items, x, y) {
+  hideCtxMenu();
+  // Webviews sind Out-of-Process-Frames und erscheinen immer über Host-Content,
+  // egal welchen z-index das Backdrop hat. Pointer-Events während des Menüs
+  // deaktivieren, damit der Backdrop Klicks in den Webview-Bereich abfängt.
+  document.querySelectorAll('webview').forEach(wv => wv.style.pointerEvents = 'none');
+
+  const backdrop = document.createElement('div');
+  backdrop.id = '_kpCtxBackdrop';
+  backdrop.addEventListener('mousedown', hideCtxMenu);
+  backdrop.addEventListener('contextmenu', e => { e.preventDefault(); hideCtxMenu(); });
+  backdrop.addEventListener('wheel', hideCtxMenu, { passive: true });
+  document.body.appendChild(backdrop);
+
+  const menu = _buildCtxMenu(items, '_kpCtxMenu');
+  // Unsichtbar einblenden → echte Größe messen → korrekt positionieren.
+  // Verhindert, dass das Menü am rechten/unteren Rand abgeschnitten wird.
+  menu.style.visibility = 'hidden';
+  menu.style.left = '0px';
+  menu.style.top  = '0px';
+  document.body.appendChild(menu);
+  const mw = menu.offsetWidth  || 220;
+  const mh = menu.offsetHeight || 20;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const left = (x + mw > vw) ? Math.max(0, x - mw) : x;
+  const top  = (y + mh > vh) ? Math.max(0, y - mh) : y;
+  menu.style.left = left + 'px';
+  menu.style.top  = top  + 'px';
+  menu.style.visibility = '';
+}
+
+// ── BOOKMARKS UI ──────────────────────────────────────────────────────────────
+// (Datenfunktionen: loadBookmarks/saveBookmarks/isBookmarked → js/storage.js)
+function toggleBookmark() {
+  const tab = activeTab();
+  if (!tab || tab.isNewTab || !tab.url) return;
+  let b = loadBookmarks();
+  if (isBookmarked(tab.url)) {
+    b = b.filter(x => x.url !== tab.url); showToast('Lesezeichen entfernt');
+  } else {
+    b.push({ url:tab.url, title:tab.title, favicon:tab.favicon }); showToast('Lesezeichen hinzugefügt');
+  }
+  saveBookmarks(b); renderBookmarksBar(); updateBookmarkBtn(tab.url);
+}
+function updateBookmarkBtn(url) {
+  const btn = document.getElementById('btnBookmark');
+  if (!url || url === 'newtab') { btn.classList.remove('active'); return; }
+  isBookmarked(url) ? btn.classList.add('active') : btn.classList.remove('active');
+}
+function renderBookmarksBar() {
+  const bar = document.getElementById('bookmarksBar');
+  const b = loadBookmarks();
+  document.body.classList.toggle('has-bookmarks', b.length > 0);
+  if (!b.length) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex'; bar.innerHTML = '';
+  b.forEach(item => {
+    const el = document.createElement('div'); el.className = 'bookmark-item'; el.title = item.url;
+    const safeIcon = item.favicon ? safeFaviconUrl(item.favicon) : null;
+    const iconHtml = safeIcon ? `<img src="${escHtml(safeIcon)}">` : `<i data-lucide="globe" width="14" height="14"></i>`;
+    el.innerHTML = `${iconHtml}<span>${escHtml(item.title)}</span>`;
+    el.addEventListener('click', e => { (e.ctrlKey||e.metaKey||e.button===1) ? createTab(item.url) : navigateActiveTab(item.url); });
+    bar.appendChild(el);
+  });
+  renderLucide();
+}
+
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ── DESIGN TOOLS ─────────────────────────────────────────────────────────────
+function _rgbToHex(cssColor) {
+  const m = cssColor.match(/\d+/g);
+  if (!m || m.length < 3) return null;
+  return '#' + m.slice(0,3).map(n => (+n).toString(16).padStart(2,'0')).join('');
+}
+
+// ── AI-TEXT-TOOLS ─────────────────────────────────────────────────────────────
+// Kopiert einen fertigen Prompt in die Zwischenablage und öffnet die AI-Sidebar,
+// damit der Nutzer ihn mit Strg+V direkt einfügen kann.
+function sendToAI(prompt) {
+  navigator.clipboard.writeText(prompt).catch(() => {});
+  // AI-Sidebar öffnen falls zu
+  const sidebar = document.getElementById('aiSidebar');
+  if (sidebar && !sidebar.classList.contains('open')) {
+    document.getElementById('btnAI')?.click();
+  }
+  showToast('Prompt kopiert → im AI-Fenster einfügen (Strg+V)');
+}
+
+// ── SPRACHEINGABE (Google Cloud Speech-to-Text REST API) ──────────────────────
+// Electron hat keine eingebetteten Google-API-Keys → Web Speech API gibt immer
+// "network" zurück. Stattdessen: MediaRecorder → WebM/Opus → Google REST API.
+// API-Key wird in den Einstellungen (Browser-Seite) hinterlegt.
+let _speechActive  = false;
+let _speechRecorder = null;
+let _speechStream   = null;
+let _speechChunks   = [];
+let _speechPrevUrl  = '';
+let _speechTimer    = null;
+let _speechSecs     = 0;
+
+function _speechLang() {
+  const m = { de:'de-DE', en:'en-US', fr:'fr-FR', es:'es-ES', it:'it-IT', nl:'nl-NL', pl:'pl-PL', pt:'pt-PT' };
+  return m[cfg.uiLang] || 'de-DE';
+}
+
+function initSpeechRecognition() {
+  const btn = document.getElementById('btnMic');
+  if (!btn || !navigator.mediaDevices?.getUserMedia) return;
+  btn.classList.add('available');
+  btn.addEventListener('click', toggleSpeech);
+}
+
+function _speechReset(urlbar, btn) {
+  _speechActive = false;
+  clearInterval(_speechTimer);
+  btn.classList.remove('recording');
+  urlbar.classList.remove('listening');
+  urlbar.placeholder = 'URL eingeben oder suchen …';
+  _speechStream?.getTracks().forEach(t => t.stop());
+  _speechStream = null;
+}
+
+async function toggleSpeech() {
+  const urlbar = document.getElementById('urlbar');
+  const btn    = document.getElementById('btnMic');
+
+  // Läuft → stoppen und Audio senden
+  if (_speechActive) { _speechRecorder?.stop(); return; }
+
+  if (!cfg.speechApiKey) {
+    showToast('Kein Speech API-Key — bitte in Einstellungen → Browser eintragen');
+    openSettings();
+    return;
+  }
+
+  try {
+    _speechStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    showToast('Mikrofon nicht verfügbar: ' + (err.message || err));
+    return;
+  }
+
+  _speechChunks  = [];
+  _speechSecs    = 0;
+  _speechPrevUrl = urlbar.value;
+  _speechActive  = true;
+
+  btn.classList.add('recording');
+  urlbar.classList.add('listening');
+  urlbar.value       = '';
+  urlbar.placeholder = '🎙 0s — Klick zum Stoppen';
+
+  _speechTimer = setInterval(() => {
+    _speechSecs++;
+    urlbar.placeholder = `🎙 ${_speechSecs}s — Klick zum Stoppen`;
+    if (_speechSecs >= 59) _speechRecorder?.stop(); // max 59 s (API-Limit)
+  }, 1000);
+
+  const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+    ? 'audio/webm;codecs=opus' : 'audio/webm';
+
+  _speechRecorder = new MediaRecorder(_speechStream, { mimeType });
+  _speechRecorder.ondataavailable = e => { if (e.data.size > 0) _speechChunks.push(e.data); };
+
+  _speechRecorder.onstop = async () => {
+    _speechReset(urlbar, btn);
+    urlbar.placeholder = '🎙 Erkenne Sprache …';
+    urlbar.classList.add('listening');
+
+    // Groq Whisper: FormData mit WebM-Blob senden — kein base64, schneller
+    const blob = new Blob(_speechChunks, { type: mimeType });
+    const form = new FormData();
+    form.append('file', blob, 'audio.webm');
+    form.append('model', 'whisper-large-v3-turbo');
+    form.append('language', _speechLang().split('-')[0]); // 'de', 'en', …
+    form.append('response_format', 'json');
+
+    try {
+      const resp = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + cfg.speechApiKey },
+        body: form,
+      });
+      const data       = await resp.json();
+      const transcript = (data.text || '').trim();
+      urlbar.classList.remove('listening');
+      urlbar.placeholder = 'URL eingeben oder suchen …';
+      if (transcript) { urlbar.value = transcript; urlbar.focus(); }
+      else { urlbar.value = _speechPrevUrl; showToast('Keine Sprache erkannt'); }
+    } catch (err) {
+      urlbar.classList.remove('listening');
+      urlbar.placeholder = 'URL eingeben oder suchen …';
+      urlbar.value = _speechPrevUrl;
+      showToast('Spracherkennung fehlgeschlagen: ' + (err.message || err));
+    }
+  };
+
+  _speechRecorder.start();
+}
+
+function showColorToast(hex) {
+  const t = document.getElementById('toast');
+  t.innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px">
+    <span style="width:13px;height:13px;border-radius:3px;border:1px solid rgba(255,255,255,.2);background:${escHtml(hex)};display:inline-block;flex-shrink:0"></span>
+    ${escHtml(hex)} kopiert
+  </span>`;
+  t.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.classList.remove('show'); t.innerHTML = ''; }, 2400);
+}
+
+function showFontInspector(info, x, y) {
+  const panel = document.getElementById('fontPanel');
+  document.getElementById('fpTag').textContent = '<' + info.tag + '>';
+  const colorHex = _rgbToHex(info.color);
+
+  const rows = [
+    ['Schrift',     info.fontFamily,   false],
+    ['Größe',       info.fontSize,     true],
+    ['Gewicht',     info.fontWeight,   true],
+    ['Stil',        info.fontStyle !== 'normal' ? info.fontStyle : '—', false],
+    ['Zeile',       info.lineHeight,   true],
+    ['Abstand',     info.letterSpacing !== 'normal' ? info.letterSpacing : '0px', true],
+    ['Align',       info.textAlign,    false],
+  ];
+  const rowsEl = document.getElementById('fpRows');
+  rowsEl.innerHTML = rows.map(([k, v, copyable]) =>
+    `<div class="fp-row"><span class="fp-key">${escHtml(k)}</span>
+     <span class="fp-val" title="${escHtml(v)}">${escHtml(v)}</span>
+     ${copyable ? `<button class="fp-copy" data-copy="${escHtml(v)}" title="Kopieren">⎘</button>` : ''}
+    </div>`
+  ).join('') + `<div class="fp-row">
+    <span class="fp-key">Farbe</span>
+    <span class="fp-swatch" style="background:${escHtml(info.color)}"></span>
+    <span class="fp-val">${escHtml(colorHex || info.color)}</span>
+    <button class="fp-copy" data-copy="${escHtml(colorHex || info.color)}" title="Kopieren">⎘</button>
+  </div>`;
+  rowsEl.querySelectorAll('.fp-copy').forEach(btn =>
+    btn.addEventListener('click', () => { navigator.clipboard.writeText(btn.dataset.copy); showToast(btn.dataset.copy + ' kopiert'); })
+  );
+
+  panel.style.left = Math.min(x + 12, window.innerWidth  - 340) + 'px';
+  panel.style.top  = Math.min(y,      window.innerHeight - 320) + 'px';
+  panel.classList.add('open');
+}
+
+// ── APPLY SETTINGS ────────────────────────────────────────────────────────────
+function applySettings() {
+  if (typeof applyTranslations === 'function') applyTranslations();
+  const root = document.documentElement;
+  root.style.setProperty('--accent',         cfg.accentColor);
+  root.style.setProperty('--accent2',        cfg.accent2Color);
+  root.style.setProperty('--danger',         cfg.dangerColor);
+  root.style.setProperty('--radius',         cfg.borderRadius + 'px');
+  root.style.setProperty('--sidebar-width',  cfg.aiSidebarWidth + 'px');
+  root.style.setProperty('--font', cfg.fontFamily === 'custom' ? (cfg.customFont || 'system-ui') : cfg.fontFamily);
+  root.style.fontSize = cfg.fontSize;
+  const op = Math.round(cfg.panelOpacity)/100;
+  const top = Math.round(cfg.toolbarOpacity)/100;
+  const ph = cfg.panelColor;
+  const pr = parseInt(ph.slice(1,3),16), pg = parseInt(ph.slice(3,5),16), pb = parseInt(ph.slice(5,7),16);
+  root.style.setProperty('--panel', `rgba(${pr},${pg},${pb},${op})`);
+  root.style.setProperty('--toolbar-panel', `rgba(${pr},${pg},${pb},${top})`);
+  root.style.setProperty('--text', cfg.textColor);
+
+  document.querySelectorAll('.newtab-page').forEach(p => applyBgToElement(p));
+  applyBgToBody();
+
+  const app = document.getElementById('app');
+  if (cfg.toolbarPos === 'bottom') {
+    app.style.flexDirection = 'column-reverse';
+    document.getElementById('toolbar').style.borderBottom = 'none';
+    document.getElementById('toolbar').style.borderTop = '1px solid var(--panel-border)';
+  } else {
+    app.style.flexDirection = 'column';
+    document.getElementById('toolbar').style.borderBottom = '1px solid var(--panel-border)';
+    document.getElementById('toolbar').style.borderTop = 'none';
+  }
+
+  const tabBar = document.getElementById('tabBar');
+  const navBar = document.getElementById('navBar');
+  if (cfg.tabPos === 'bottom') {
+    document.getElementById('toolbar').appendChild(tabBar);
+    document.getElementById('toolbar').insertBefore(navBar, tabBar);
+  } else {
+    document.getElementById('toolbar').insertBefore(tabBar, navBar);
+  }
+
+  document.body.classList.remove('tabs-compact','tabs-pill','tabs-icon-only');
+  if (cfg.tabStyle === 'compact') document.body.classList.add('tabs-compact');
+  if (cfg.tabStyle === 'pill')    document.body.classList.add('tabs-pill');
+  if (cfg.tabStyle === 'icon')    document.body.classList.add('tabs-icon-only');
+
+  const sidebar = document.getElementById('aiSidebar');
+  cfg.aiSidebarPos === 'left' ? sidebar.classList.add('left') : sidebar.classList.remove('left');
+
+  document.getElementById('btnBack').style.display      = cfg.showBackFwd  ? '' : 'none';
+  document.getElementById('btnFwd').style.display       = cfg.showBackFwd  ? '' : 'none';
+  document.getElementById('btnReload').style.display    = cfg.showReload   ? '' : 'none';
+  document.getElementById('btnHome').style.display      = cfg.showHome     ? '' : 'none';
+  document.getElementById('secBadge').style.display     = cfg.showBadge    ? '' : 'none';
+  document.getElementById('btnHistory').style.display   = cfg.showHistoryBtn ? '' : 'none';
+  document.getElementById('btnPasswords').style.display = cfg.showPwBtn    ? '' : 'none';
+  document.getElementById('btnAI').style.display        = cfg.showAiBtn    ? '' : 'none';
+
+  document.title = cfg.browserName;
+  tabs.forEach(t => { if (t.isNewTab && t.newtabEl) buildNewtabContent(t.newtabEl); });
+
+  if (typeof applyTabBarPos === 'function') applyTabBarPos(cfg.tabBarPos);
+  if (typeof applyNavOrder  === 'function') applyNavOrder();
+}
+
+function applyBgToBody() {
+  const body = document.body;
+  switch(cfg.bgType) {
+    case 'color':      body.style.background = `radial-gradient(circle at top, ${cfg.bgGrad1} 0%, ${cfg.bgColor} 55%)`; break;
+    case 'gradient':   body.style.background = cfg.bgGradDir === 'radial' ? `radial-gradient(circle at center,${cfg.bgGrad1},${cfg.bgGrad2})` : `linear-gradient(${cfg.bgGradDir},${cfg.bgGrad1},${cfg.bgGrad2})`; break;
+    case 'image':      body.style.background = cfg.bgImageUrl ? `url('${cfg.bgImageUrl}') ${cfg.bgPos}/${cfg.bgSize} no-repeat` : cfg.bgColor; break;
+    case 'localimage': body.style.background = cfg.bgLocalUrl ? `url('${cfg.bgLocalUrl}') ${cfg.bgPosLocal||'center'}/${cfg.bgSizeLocal||'cover'} no-repeat` : cfg.bgColor; break;
+    case 'solid':      body.style.background = cfg.bgSolid; break;
+  }
+}
+function applyBgToElement(el) {
+  switch(cfg.bgType) {
+    case 'color':      el.style.background = `radial-gradient(circle at top, ${cfg.bgGrad1} 0%, ${cfg.bgColor} 55%)`; break;
+    case 'gradient':   el.style.background = cfg.bgGradDir === 'radial' ? `radial-gradient(circle at center,${cfg.bgGrad1},${cfg.bgGrad2})` : `linear-gradient(${cfg.bgGradDir},${cfg.bgGrad1},${cfg.bgGrad2})`; break;
+    // Bild-Typen: transparent lassen damit der Body-Hintergrund durchscheint
+    case 'image':
+    case 'localimage': el.style.background = 'transparent'; break;
+    case 'solid':      el.style.background = cfg.bgSolid; break;
+  }
+}
+
+// Detach AI sidebar to window
+document.getElementById('aiSidebar-detach').addEventListener('click', () => {
+  const btn = document.getElementById('aiSidebar-detach');
+  _aiWindowOpen = true;
+  document.getElementById('aiSidebar').classList.remove('open');
+  aiSidebarOpen = false;
+  const providers = AI_PROVIDERS.filter(p => cfg.aiEnabledProviders.includes(p.id));
+  eAPI.aiWindowOpen?.({ width:450, height:640, providers, active: cfg.aiActiveProvider });
+  btn.classList.add('active');
+});
+
+// Listen for AI window close
+if (eAPI.onAiWindowClosed) {
+  eAPI.onAiWindowClosed(() => {
+    _aiWindowOpen = false;
+    document.getElementById('aiSidebar-detach').classList.remove('active');
+  });
+}
+
+// Open URLs from AI window
+if (eAPI.onOpenUrlFromAi) {
+  eAPI.onOpenUrlFromAi(url => { createTab(url); });
+}
+
+// ── HISTORY UI ────────────────────────────────────────────────────────────────
+function openHistory()  { document.getElementById('historyOverlay').style.display = 'flex'; renderHistoryList(''); setTimeout(() => { renderLucide(); document.getElementById('historySearch').focus(); }, 50); }
+function closeHistory() { document.getElementById('historyOverlay').style.display = 'none'; }
+
+// ── DOWNLOADS UI ─────────────────────────────────────────────────────────────
+let _downloads = [];
+function fmtBytes(n) {
+  if (!n && n !== 0) return '';
+  if (n < 1024) return n + ' B';
+  if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+  return (n/1024/1024).toFixed(1) + ' MB';
+}
+function renderDownloadsList() {
+  const list = document.getElementById('downloadsList');
+  if (!list) return;
+  if (!_downloads.length) { list.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Noch keine Downloads.</div>'; return; }
+  list.innerHTML = _downloads.map(d => {
+    const pct = d.totalBytes ? Math.round(d.receivedBytes / d.totalBytes * 100) : 0;
+    const statusText = d.state === 'completed' ? fmtBytes(d.totalBytes)
+      : d.state === 'progressing' ? `${fmtBytes(d.receivedBytes)} / ${fmtBytes(d.totalBytes)} · ${pct}%`
+      : d.state === 'cancelled' ? 'Abgebrochen' : 'Fehlgeschlagen';
+    return `<div class="dl-item" data-id="${d.id}">
+      <div class="dl-name">${escHtml(d.filename)}</div>
+      <div class="dl-meta"><span>${statusText}</span></div>
+      ${d.state === 'progressing' ? `<div class="dl-bar"><div class="dl-bar-fill" style="width:${pct}%"></div></div>` : ''}
+      <div class="dl-actions">
+        <button class="s-btn" data-act="open" style="font-size:11px;padding:3px 8px">Öffnen</button>
+        <button class="s-btn" data-act="folder" style="font-size:11px;padding:3px 8px">Ordner zeigen</button>
+      </div>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.dl-item').forEach(el => {
+    const id = +el.dataset.id;
+    el.querySelector('[data-act="open"]')?.addEventListener('click', () => eAPI.downloads?.openFile(id));
+    el.querySelector('[data-act="folder"]')?.addEventListener('click', () => eAPI.downloads?.showInFolder(id));
+  });
+}
+function openDownloads()  { document.getElementById('downloadsOverlay').classList.add('open'); document.getElementById('dlBadge').style.display = 'none'; renderDownloadsList(); renderLucide(); }
+function closeDownloads() { document.getElementById('downloadsOverlay').classList.remove('open'); }
+if (eAPI.onDownloadsUpdate) {
+  eAPI.onDownloadsUpdate(list => {
+    _downloads = list;
+    renderDownloadsList();
+    const overlayOpen = document.getElementById('downloadsOverlay').classList.contains('open');
+    if (!overlayOpen && list.some(d => d.state === 'progressing')) {
+      document.getElementById('dlBadge').style.display = 'block';
+    }
+  });
+}
+eAPI.downloads?.list?.().then(list => { _downloads = list || []; });
+function renderHistoryList(filter) {
+  const list = document.getElementById('historyList');
+  const h = loadHistory(), q = filter.toLowerCase();
+  const filtered = q ? h.filter(e => e.url.toLowerCase().includes(q)||(e.title||'').toLowerCase().includes(q)) : h;
+  if (!filtered.length) { list.innerHTML = '<div style="padding:2rem;text-align:center;color:var(--muted)">Kein Verlauf gefunden.</div>'; return; }
+  list.innerHTML = '';
+  filtered.forEach(e => {
+    const item = document.createElement('div'); item.className = 'history-item';
+    item.innerHTML = `<span class="hi-time">${new Date(e.ts).toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</span>
+      <div style="flex:1;min-width:0"><div class="hi-title">${escHtml(e.title||e.url)}</div><div class="hi-url">${escHtml(e.url)}</div></div>
+      <span class="hi-del"><i data-lucide="x" width="13" height="13"></i></span>`;
+    item.addEventListener('click', ev => {
+      if (ev.target.closest('.hi-del')) {
+        deleteHistoryEntry(e.ts, e.url); renderHistoryList(document.getElementById('historySearch').value); return;
+      }
+      navigateActiveTab(e.url); closeHistory();
+    });
+    list.appendChild(item);
+  });
+  renderLucide();
+}
+
+// ── SETTINGS UI ───────────────────────────────────────────────────────────────
+function openSettings()  { syncSettingsUI(); document.getElementById('settingsOverlay').classList.add('open'); }
+function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
+
+function syncSettingsUI() {
+  populateLanguageSelect();
+  setCP('pickerAccent','swatchAccent',cfg.accentColor);
+  setCP('pickerAccent2','swatchAccent2',cfg.accent2Color);
+  setCP('pickerDanger','swatchDanger',cfg.dangerColor);
+  setCP('pickerPanel','swatchPanel',cfg.panelColor);
+  setCP('pickerText','swatchText',cfg.textColor);
+  setCP('pickerBg','swatchBg',cfg.bgColor);
+  setCP('pickerGrad1','swatchGrad1',cfg.bgGrad1);
+  setCP('pickerGrad2','swatchGrad2',cfg.bgGrad2);
+  setCP('pickerSolid','swatchSolid',cfg.bgSolid);
+
+  const rad = document.getElementById('radiusSlider');
+  if (rad) { rad.value = cfg.borderRadius; document.getElementById('radiusVal').textContent = cfg.borderRadius+'px'; }
+  const pop = document.getElementById('panelOpacitySlider');
+  if (pop) { pop.value = cfg.panelOpacity; document.getElementById('panelOpacityVal').textContent = cfg.panelOpacity+'%'; }
+  const top2 = document.getElementById('toolbarOpacitySlider');
+  if (top2) { top2.value = cfg.toolbarOpacity??92; document.getElementById('toolbarOpacityVal').textContent = (cfg.toolbarOpacity??92)+'%'; }
+  // sync Verlauf-Picker
+  const g1b=document.getElementById('pickerGrad1b'); if(g1b){g1b.value=cfg.bgGrad1;document.getElementById('swatchGrad1b').style.background=cfg.bgGrad1;}
+  const g2b=document.getElementById('pickerGrad2b'); if(g2b){g2b.value=cfg.bgGrad2;document.getElementById('swatchGrad2b').style.background=cfg.bgGrad2;}
+  const lbn=document.getElementById('localBgName'); if(lbn&&cfg.bgLocalName)lbn.textContent=cfg.bgLocalName;
+
+  ['gradDir','bgSize','bgPos','searchEngine','fontFamily','fontSize'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = cfg[id];
+  });
+  ['bgImageUrl','customSearchUrl','browserName','browserSubtitle','homeUrl'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = cfg[id];
+  });
+  const gsk = document.getElementById('speechApiKeyInput'); if(gsk) gsk.value = cfg.speechApiKey || '';
+  const cfi = document.getElementById('customFontInput'); if(cfi) cfi.value = cfg.customFont;
+  const sw = document.getElementById('sidebarWidthSlider');
+  if (sw) { sw.value = cfg.aiSidebarWidth; document.getElementById('sidebarWidthLabel').textContent = cfg.aiSidebarWidth+'px'; }
+  const aac = document.getElementById('aiAutoCtx'); if(aac) aac.checked = !!cfg.aiAutoCtx;
+
+  const toggles = ['showBackFwd','showReload','showHome','showBadge','showHistoryBtn','showPwBtn','showAiBtn','adblock','trackerblock','autofill','askSave','saveHistory','clearCookies','allowPopups','enableJS','loadImages','restoreSession'];
+  toggles.forEach(k => { const el=document.getElementById(k); if(el) el.checked=!!cfg[k]; });
+
+  document.querySelectorAll('.theme-chip').forEach(c => c.classList.toggle('selected', c.dataset.theme===cfg.theme));
+  showBgSection(cfg.bgType);
+  renderQuickLinks();
+  renderAiProviderSettings();
+  document.querySelectorAll('.layout-opt').forEach(el => el.classList.toggle('selected', cfg[el.dataset.layoutKey]===el.dataset.layoutVal));
+}
+
+function setCP(pid, sid, val) {
+  const p=document.getElementById(pid), s=document.getElementById(sid);
+  if(p) p.value=val; if(s) s.style.background=val;
+}
+
+function showBgSection(type) {
+  const m={color:'bgColorSection',gradient:'bgGradientSection',image:'bgImageSection',localimage:'bgLocalImageSection',solid:'bgSolidSection'};
+  for(const[t,id] of Object.entries(m)){const el=document.getElementById(id);if(el)el.classList.toggle('hidden',t!==type);}
+  document.querySelectorAll('.bg-opt').forEach(o=>o.classList.toggle('active',o.dataset.bgtype===type));
+}
+
+function renderQuickLinks() {
+  const list=document.getElementById('quickLinksList'); if(!list)return; list.innerHTML='';
+  cfg.quickLinks.forEach((ql,i) => {
+    const row=document.createElement('div'); row.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:6px';
+    row.innerHTML=`<input class="s-input" value="${escHtml(ql.label)}" placeholder="Label" style="width:110px" data-i="${i}" data-field="label"/><input class="s-input" value="${escHtml(ql.url)}" placeholder="URL" style="flex:1" data-i="${i}" data-field="url"/><button class="s-btn danger" data-i="${i}" style="min-width:32px;padding:5px 8px">✕</button>`;
+    row.querySelectorAll('input').forEach(inp=>inp.addEventListener('input',e=>{cfg.quickLinks[+e.target.dataset.i][e.target.dataset.field]=e.target.value;saveSettings();}));
+    row.querySelector('button').addEventListener('click',e=>{cfg.quickLinks.splice(+e.currentTarget.dataset.i,1);saveSettings();applySettings();renderQuickLinks();});
+    list.appendChild(row);
+  });
+}
+
+function renderAiProviderSettings() {
+  const list=document.getElementById('aiProviderSettingsList'); if(!list)return; list.innerHTML='';
+  AI_PROVIDERS.forEach(p => {
+    const enabled=cfg.aiEnabledProviders.includes(p.id);
+    const item=document.createElement('div'); item.className='ai-provider-item';
+    item.innerHTML=`<div class="ai-provider-dot" style="background:${p.color}"></div><div class="ai-provider-info"><strong>${p.name}</strong><small>${p.url}</small></div><label class="s-toggle"><input type="checkbox" ${enabled?'checked':''} data-provider="${p.id}"/><span class="s-toggle-track"></span></label>`;
+    item.querySelector('input').addEventListener('change',e=>{
+      if(e.target.checked){if(!cfg.aiEnabledProviders.includes(p.id))cfg.aiEnabledProviders.push(p.id);}
+      else cfg.aiEnabledProviders=cfg.aiEnabledProviders.filter(id=>id!==p.id);
+      saveSettings(); if(aiSidebarOpen)buildAiProviderTabs();
+    });
+    list.appendChild(item);
+  });
+}
+
+// Nur Sprachen mit echter, vollständiger Übersetzung anbieten — der Rest würde
+// sonst still auf Englisch zurückfallen und wie ein Bug wirken.
+const REAL_TRANSLATED_LANGS = ['de', 'en', 'fr', 'es', 'it'];
+function populateLanguageSelect() {
+  const sel = document.getElementById('uiLanguage');
+  if (!sel || typeof LANGUAGES === 'undefined') return;
+  sel.innerHTML = REAL_TRANSLATED_LANGS.map(code => {
+    const l = LANGUAGES[code]; if (!l) return '';
+    return `<option value="${code}">${l.flag} ${l.name}</option>`;
+  }).join('');
+  sel.value = REAL_TRANSLATED_LANGS.includes(cfg.uiLang) ? cfg.uiLang : 'de';
+}
+
+function bindSettingsListeners() {
+  populateLanguageSelect();
+  document.getElementById('uiLanguage')?.addEventListener('change', e => {
+    cfg.uiLang = e.target.value;
+    saveSettings();
+    if (typeof applyTranslations === 'function') applyTranslations();
+  });
+  document.querySelectorAll('.snav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.snav-item,.s-page').forEach(i=>i.classList.remove('active'));
+      item.classList.add('active');
+      const page = item.dataset.page;
+      document.getElementById('s-'+page)?.classList.add('active');
+      if (page === 'layout' && typeof buildLayoutSettingsUI === 'function') buildLayoutSettingsUI();
+    });
+  });
+  const colorMap=[['pickerAccent','swatchAccent','accentColor'],['pickerAccent2','swatchAccent2','accent2Color'],['pickerDanger','swatchDanger','dangerColor'],['pickerPanel','swatchPanel','panelColor'],['pickerText','swatchText','textColor'],['pickerBg','swatchBg','bgColor'],['pickerGrad1','swatchGrad1','bgGrad1'],['pickerGrad2','swatchGrad2','bgGrad2'],['pickerSolid','swatchSolid','bgSolid']];
+  colorMap.forEach(([pid,sid,key])=>{document.getElementById(pid)?.addEventListener('input',e=>{cfg[key]=e.target.value;document.getElementById(sid).style.background=e.target.value;saveSettings();applySettings();});});
+
+  document.getElementById('radiusSlider')?.addEventListener('input',e=>{cfg.borderRadius=+e.target.value;document.getElementById('radiusVal').textContent=e.target.value+'px';saveSettings();applySettings();});
+  document.getElementById('panelOpacitySlider')?.addEventListener('input',e=>{cfg.panelOpacity=+e.target.value;document.getElementById('panelOpacityVal').textContent=e.target.value+'%';saveSettings();applySettings();});
+  document.getElementById('toolbarOpacitySlider')?.addEventListener('input',e=>{cfg.toolbarOpacity=+e.target.value;document.getElementById('toolbarOpacityVal').textContent=e.target.value+'%';saveSettings();applySettings();});
+
+  // Verlauf-Farbpicker (eigene IDs, schreiben in cfg.bgGrad1/2)
+  const gradColorMap=[['pickerGrad1b','swatchGrad1b','bgGrad1'],['pickerGrad2b','swatchGrad2b','bgGrad2']];
+  gradColorMap.forEach(([pid,sid,key])=>{
+    const el=document.getElementById(pid); if(!el)return;
+    el.addEventListener('input',e=>{cfg[key]=e.target.value;document.getElementById(sid).style.background=e.target.value;saveSettings();applySettings();});
+  });
+
+  // Lokal-Bild File-Picker
+  document.getElementById('btnPickLocalBg')?.addEventListener('click',()=>{
+    const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*';
+    inp.addEventListener('change',()=>{
+      const file=inp.files[0]; if(!file)return;
+      const reader=new FileReader();
+      reader.onload=e=>{
+        cfg.bgLocalUrl=e.target.result;
+        cfg.bgLocalName=file.name;
+        const nameEl=document.getElementById('localBgName');
+        if(nameEl)nameEl.textContent=file.name;
+        saveSettings();applySettings();
+      };
+      reader.readAsDataURL(file);
+    });
+    inp.click();
+  });
+  document.getElementById('sidebarWidthSlider')?.addEventListener('input',e=>{cfg.aiSidebarWidth=+e.target.value;document.getElementById('sidebarWidthLabel').textContent=e.target.value+'px';saveSettings();applySettings();});
+
+  document.querySelectorAll('.theme-chip').forEach(c=>c.addEventListener('click',()=>{cfg.theme=c.dataset.theme;applyThemePreset(cfg.theme);saveSettings();applySettings();syncSettingsUI();}));
+  document.querySelectorAll('.bg-opt').forEach(o=>o.addEventListener('click',()=>{cfg.bgType=o.dataset.bgtype;showBgSection(cfg.bgType);saveSettings();applySettings();}));
+  document.querySelectorAll('.layout-opt').forEach(el=>el.addEventListener('click',()=>{cfg[el.dataset.layoutKey]=el.dataset.layoutVal;saveSettings();applySettings();document.querySelectorAll('.layout-opt').forEach(e=>e.classList.toggle('selected',cfg[e.dataset.layoutKey]===e.dataset.layoutVal));}));
+
+  ['bgImageUrl','customSearchUrl','browserName','browserSubtitle','homeUrl'].forEach(id=>{
+    document.getElementById(id)?.addEventListener('input',e=>{cfg[id]=e.target.value;saveSettings();applySettings();});
+  });
+  document.getElementById('customFontInput')?.addEventListener('input',e=>{cfg.customFont=e.target.value;saveSettings();applySettings();});
+  ['gradDir','bgSize','bgPos','bgSizeLocal','bgPosLocal','searchEngine','fontFamily','fontSize'].forEach(id=>{
+    document.getElementById(id)?.addEventListener('change',e=>{cfg[id]=e.target.value;saveSettings();applySettings();});
+  });
+  document.getElementById('aiAutoCtx')?.addEventListener('change',e=>{cfg.aiAutoCtx=e.target.checked;saveSettings();});
+  document.getElementById('speechApiKeyInput')?.addEventListener('input', e => { cfg.speechApiKey = e.target.value.trim(); saveSettings(); });
+  document.getElementById('speechApiKeyToggle')?.addEventListener('click', () => {
+    const inp = document.getElementById('speechApiKeyInput');
+    if (inp) inp.type = inp.type === 'password' ? 'text' : 'password';
+  });
+
+  const toggles=['showBackFwd','showReload','showHome','showBadge','showHistoryBtn','showPwBtn','showAiBtn','adblock','trackerblock','autofill','askSave','saveHistory','clearCookies','allowPopups','enableJS','loadImages','restoreSession'];
+  toggles.forEach(k=>{document.getElementById(k)?.addEventListener('change',e=>{
+    cfg[k]=e.target.checked;saveSettings();applySettings();
+    if(k==='trackerblock') eAPI.setTrackerBlock?.(cfg.trackerblock);
+  });});
+
+  document.getElementById('addQuickLink')?.addEventListener('click',()=>{cfg.quickLinks.push({label:'Link',url:'https://'});saveSettings();applySettings();renderQuickLinks();});
+  document.getElementById('clearHistoryBtn')?.addEventListener('click',()=>{if(confirm('Gesamten Verlauf löschen?')){saveHistory([]);showToast('Verlauf geleert');}});
+  document.getElementById('resetSettings')?.addEventListener('click',()=>{if(confirm('Alle Einstellungen zurücksetzen?')){cfg={...defaultSettings};saveSettings();applySettings();syncSettingsUI();showToast('Einstellungen zurückgesetzt');}});
+  document.getElementById('settingsOverlay')?.addEventListener('click',e=>{if(e.target===document.getElementById('settingsOverlay'))closeSettings();});
+  document.getElementById('closeSettingsBtn')?.addEventListener('click',closeSettings);
+}
+
+function applyThemePreset(theme) {
+  const presets={
+    dark: {bg:'#070b10',panel:'#0d1520',text:'#ecf2f8',accent:'#ff9f1c',accent2:'#4cc9f0',danger:'#ff5c7a',bgGrad1:'#132033',bgGrad2:'#070b10'},
+    light:{bg:'#f0f4f8',panel:'#ffffff',text:'#1a1a2e',accent:'#e05c00',accent2:'#0070d4',danger:'#d0004f',bgGrad1:'#d0e8f8',bgGrad2:'#f0f4f8'}
+  };
+  const p=presets[theme]||presets.dark;
+  Object.assign(cfg,{bgColor:p.bg,panelColor:p.panel,textColor:p.text,accentColor:p.accent,accent2Color:p.accent2,dangerColor:p.danger,bgGrad1:p.bgGrad1,bgGrad2:p.bgGrad2,bgType:'color'});
+}
+
+// ── AUTOFILL ──────────────────────────────────────────────────────────────────
+async function tryAutofill(wv, url) {
+  if (!cfg.autofill) return;
+  try {
+    const origin = new URL(url).origin;
+    const entry  = await vault.get(origin);
+    if (!entry) return;
+    wv.executeJavaScript(`(function(){const d=${JSON.stringify({u:entry.username,p:entry.password})};const ui=document.querySelector('input[type="email"],input[name*="user" i],input[type="text"]');const pi=document.querySelector('input[type="password"]');if(ui&&!ui.value){ui.value=d.u;ui.dispatchEvent(new Event('input',{bubbles:true}));}if(pi&&!pi.value){pi.value=d.p;pi.dispatchEvent(new Event('input',{bubbles:true}));}})()`).catch(()=>{});
+  } catch{}
+}
+
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// Nur https:// Favicon-URLs sind erlaubt (verhindert javascript:/data: Missbrauch)
+function safeFaviconUrl(url) {
+  try { return new URL(url).protocol === 'https:' ? url : null; }
+  catch { return null; }
+}
+
+// ── HISTORY listeners ─────────────────────────────────────────────────────────
+document.getElementById('closeHistory')?.addEventListener('click', closeHistory);
+document.getElementById('historyOverlay')?.addEventListener('click', e=>{if(e.target===document.getElementById('historyOverlay'))closeHistory();});
+document.getElementById('historySearch')?.addEventListener('input', e=>renderHistoryList(e.target.value));
+document.getElementById('clearHistoryBtn2')?.addEventListener('click', ()=>{if(confirm('Gesamten Verlauf löschen?')){saveHistory([]);renderHistoryList('');showToast('Verlauf geleert');}});
+
+// ── NAV listeners ─────────────────────────────────────────────────────────────
+document.getElementById('btnBack').addEventListener('click',   ()=>{const t=activeTab();if(t&&t.webviewEl&&t.webviewEl.canGoBack())t.webviewEl.goBack();});
+document.getElementById('btnFwd').addEventListener('click',    ()=>{const t=activeTab();if(t&&t.webviewEl&&t.webviewEl.canGoForward())t.webviewEl.goForward();});
+document.getElementById('btnReload').addEventListener('click', ()=>{const t=activeTab();if(t&&t.webviewEl)t.webviewEl.reload();});
+document.getElementById('btnHome').addEventListener('click',   ()=>{
+  if (!cfg.homeUrl||cfg.homeUrl==='newtab') {
+    const tab=activeTab();
+    // Schon ein Newtab → nichts neu rendern, kein Animation-Neustart
+    if(tab&&tab.isNewTab) return;
+    if(tab&&tab.webviewEl){tab.webviewEl.remove();tab.webviewEl=null;}
+    if(tab){tab.isNewTab=true;tab.title='Neuer Tab';tab.url='newtab';}
+    // Altes newtabEl wiederverwenden falls noch im DOM
+    if(tab&&tab.newtabEl&&tab.newtabEl.isConnected){
+      tab.newtabEl.classList.add('active');
+    } else {
+      const nt=document.createElement('div');nt.className='newtab-page active';
+      if(tab)tab.newtabEl=nt;
+      buildNewtabContent(nt);document.getElementById('content').appendChild(nt);
+    }
+    document.getElementById('urlbar').value='';renderTabBar();
+  } else { navigateActiveTab(cfg.homeUrl); }
+});
+document.getElementById('urlbar').addEventListener('keydown', e=>{if(e.key==='Enter')navigateActiveTab(e.target.value);});
+document.getElementById('newTabBtn').addEventListener('click',    ()=>createTab('newtab'));
+document.getElementById('newTabBtn').addEventListener('contextmenu', e=>{
+  e.preventDefault();
+  showCtxMenu([{ label:'🕵️ Neuer Inkognito-Tab', click: () => createTab('newtab', true) }], e.clientX, e.clientY);
+});
+document.getElementById('btnBookmark').addEventListener('click',  toggleBookmark);
+document.getElementById('btnSettings').addEventListener('click',  openSettings);
+document.getElementById('btnPasswords').addEventListener('click', openPasswords);
+document.getElementById('btnAI').addEventListener('click',        toggleAiSidebar);
+document.getElementById('btnHistory').addEventListener('click',   openHistory);
+document.getElementById('btnDownloads').addEventListener('click', openDownloads);
+
+// ── Adblocker Toggle ─────────────────────────────────────────────────────────
+let _adBlockActive = true;
+function updateAdBlockBtn() {
+  const btn = document.getElementById('btnAdBlock');
+  if (!btn) return;
+  if (_adBlockActive) {
+    btn.title = 'Werbeblocker aktiv – klicken zum Deaktivieren';
+    btn.style.color = 'var(--accent)';
+    btn.querySelector('i')?.setAttribute('data-lucide', 'shield-check');
+  } else {
+    btn.title = 'Werbeblocker deaktiviert – klicken zum Aktivieren';
+    btn.style.color = 'var(--danger)';
+    btn.querySelector('i')?.setAttribute('data-lucide', 'shield-off');
+  }
+  renderLucide();
+}
+document.getElementById('btnAdBlock')?.addEventListener('click', () => {
+  _adBlockActive = !_adBlockActive;
+  window.electronAPI?.setAdBlock(_adBlockActive);
+  updateAdBlockBtn();
+  showToast(_adBlockActive ? '🛡 Werbeblocker aktiviert' : '🛡 Werbeblocker deaktiviert');
+});
+// Initialzustand vom Main-Prozess holen
+window.electronAPI?.getAdBlock?.().then(v => { _adBlockActive = !!v; updateAdBlockBtn(); }).catch(() => {});
+
+document.getElementById('closeDownloads')?.addEventListener('click', closeDownloads);
+document.getElementById('downloadsOverlay')?.addEventListener('click', e=>{if(e.target===document.getElementById('downloadsOverlay'))closeDownloads();});
+document.getElementById('clearDownloadsBtn')?.addEventListener('click', ()=>{eAPI.downloads?.clear(); });
+document.getElementById('aiSidebar-close').addEventListener('click', toggleAiSidebar);
+document.getElementById('aiBtnSendCtx').addEventListener('click', sendCtxToCurrentAi);
+document.getElementById('aiBtnSysPrompt').addEventListener('click', () => {
+  const turningOn = !aiBrowserModeOn;
+  setAiBrowserMode(turningOn);
+  if (turningOn) {
+    const wv = aiWebviews[cfg.aiActiveProvider];
+    if (wv) {
+      const msg = 'Noch ein Hinweis: wenn ich dich bitte eine Website zu öffnen (z.B. "öffne YouTube", ' +
+        '"such mir Video X"), kannst du einfach den vollständigen Link als Text schreiben (z.B. https://youtube.com) ' +
+        '– mein Browser erkennt das automatisch und öffnet es als neuen Tab für mich, du musst also nicht ablehnen. ' +
+        'Kennst du die exakte Ziel-URL nicht (z.B. ein bestimmtes Video), reicht auch ein Such-Link wie ' +
+        'https://www.youtube.com/results?search_query=DEIN+SUCHBEGRIFF.';
+      injectAiText(wv, msg, true);
+    }
+    showToast('Automatisches Link-Öffnen aktiv');
+  } else {
+    showToast('Automatisches Link-Öffnen deaktiviert');
+  }
+});
+document.getElementById('aiProviderTabs').addEventListener('wheel', e=>{if(e.deltaY!==0){e.preventDefault();e.currentTarget.scrollLeft+=e.deltaY;}});
+
+// ── Extension badge stub ──────────────────────────────────────────────────────
+function updateExtBadge() {}
+try { updateExtBadge(); } catch(e) {}
+
+// ── Auto-Update ────────────────────────────────────────────────────────────────
+if (eAPI.onUpdateReady) {
+  eAPI.onUpdateReady(() => {
+    const bar = document.createElement('div');
+    bar.style.cssText = 'position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:99999;background:#1a2030;border:1px solid #2a3548;border-radius:10px;padding:8px 10px 8px 16px;display:flex;align-items:center;gap:10px;font-size:13px;color:#ecf2f8;box-shadow:0 8px 24px rgba(0,0,0,.5)';
+    bar.innerHTML = 'Update heruntergeladen – jetzt neu starten? <button id="_updBtn" style="background:var(--accent);color:#000;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-weight:600">Neustarten</button>';
+    document.body.appendChild(bar);
+    document.getElementById('_updBtn').addEventListener('click', () => eAPI.installUpdate());
+  });
+}
+
+if (eAPI.onUpdateStatus) {
+  eAPI.onUpdateStatus(({ status, version, percent, message }) => {
+    const txt = document.getElementById('updateStatusText');
+    const btnCheck = document.getElementById('btnCheckUpdate');
+    const btnInstall = document.getElementById('btnInstallUpdate');
+    if (!txt) return;
+    switch (status) {
+      case 'checking':      txt.textContent = 'Suche nach Updates …'; if(btnCheck) btnCheck.disabled = true; break;
+      case 'available':     txt.textContent = `Update ${version} gefunden – wird heruntergeladen …`; break;
+      case 'not-available': txt.textContent = 'Du bist auf dem neuesten Stand.'; if(btnCheck) btnCheck.disabled = false; break;
+      case 'downloading':   txt.textContent = `Wird heruntergeladen … ${percent||0}%`; break;
+      case 'downloaded':    txt.textContent = 'Update heruntergeladen – bereit zur Installation.'; if(btnCheck) btnCheck.disabled = false; if(btnInstall) btnInstall.style.display = 'block'; break;
+      case 'error':         txt.textContent = 'Fehler bei der Update-Suche: ' + (message||''); if(btnCheck) btnCheck.disabled = false; break;
+    }
+  });
+}
+document.getElementById('btnCheckUpdate')?.addEventListener('click', () => eAPI.checkForUpdates?.());
+document.getElementById('btnInstallUpdate')?.addEventListener('click', () => eAPI.installUpdate?.());
+
+// ── URL-AUTOCOMPLETE AUS DEM VERLAUF ────────────────────────────────────────
+function buildUrlSuggestions(query) {
+  const box = document.getElementById('urlSuggestions');
+  if (!box) return;
+  if (!query || query.length < 2) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  const q = query.toLowerCase();
+  const seen = new Set();
+  const matches = [];
+  for (const h of loadHistory()) {
+    if (seen.has(h.url)) continue;
+    if (h.url.toLowerCase().includes(q) || (h.title||'').toLowerCase().includes(q)) {
+      seen.add(h.url); matches.push(h);
+      if (matches.length === 6) break;
+    }
+  }
+  if (!matches.length) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.innerHTML = matches.map(m => `
+    <div class="url-suggestion" data-url="${escHtml(m.url)}">
+      <i data-lucide="clock" width="13" height="13"></i>
+      <span class="us-title">${escHtml(m.title||m.url)}</span>
+      <span class="us-url">${escHtml(m.url)}</span>
+    </div>`).join('');
+  box.style.display = 'block';
+  box.querySelectorAll('.url-suggestion').forEach(el => {
+    el.addEventListener('mousedown', ev => { ev.preventDefault(); navigateActiveTab(el.dataset.url); box.style.display = 'none'; });
+  });
+  renderLucide();
+}
+document.getElementById('urlbar')?.addEventListener('input', e => buildUrlSuggestions(e.target.value));
+document.getElementById('urlbar')?.addEventListener('blur', () => {
+  setTimeout(() => { const box = document.getElementById('urlSuggestions'); if (box) box.style.display = 'none'; }, 150);
+});
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+loadSettings();
+applySettings();
+bindSettingsListeners();
+renderBookmarksBar();
+renderLucide();
+updateAdBlockBtn();
+
+// History aus IndexedDB laden (async, im Hintergrund; Tabs können sofort öffnen)
+historyInit().catch(() => {});
+
+initSpeechRecognition();
+document.getElementById('fpClose').addEventListener('click', () => document.getElementById('fontPanel').classList.remove('open'));
+document.addEventListener('mousedown', e => {
+  const panel = document.getElementById('fontPanel');
+  if (panel.classList.contains('open') && !panel.contains(e.target)) panel.classList.remove('open');
+}, true);
+
+const _restoredUrls = cfg.restoreSession ? loadSessionTabs() : [];
+if (_restoredUrls.length) { _restoredUrls.forEach(u => createTab(u)); }
+else { createTab('newtab'); }
+</script>
+</body>
+</html>

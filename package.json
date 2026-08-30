@@ -1,0 +1,65 @@
+{
+  "name": "kartoffel-puffer",
+  "version": "0.3.1",
+  "private": true,
+  "description": "Kartoffel Puffer – eigener Chromium-Browser auf Electron-Basis",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --inspect",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^36.0.0",
+    "electron-builder": "^24.13.3",
+    "lucide": "^1.27.0"
+  },
+  "dependencies": {
+    "@ghostery/adblocker-electron": "^2.18.2",
+    "cross-fetch": "^4.1.0",
+    "electron-updater": "^6.8.9"
+  },
+  "build": {
+    "appId": "de.kartoffelpuffer.browser",
+    "productName": "Kartoffel Puffer",
+    "files": [
+      "**/*",
+      "!*.electron.bak",
+      "!*.bak",
+      "!start.log",
+      "!node_modules/electron-builder/**",
+      "!node_modules/app-builder-lib/**",
+      "!node_modules/app-builder-bin/**",
+      "!node_modules/7zip-bin/**",
+      "!node_modules/typescript/**",
+      "!node_modules/@types/**",
+      "!node_modules/config-file-ts/**",
+      "!node_modules/plist/**",
+      "!node_modules/lucide/**",
+      "!vercel-updates/**",
+      "!dist/**"
+    ],
+    "extraResources": [
+      {
+        "from": "extensions",
+        "to": "extensions"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "icons/Logo_kartoffelPuffer_lightmode.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": {
+      "provider": "generic",
+      "url": "https://kartoffel-puffer-updates.vercel.app/updates"
+    }
+  }
+}
