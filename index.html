@@ -529,6 +529,7 @@ body:not(.feat--aiWindow)  #aiSidebar-detach { display: none !important; }
 body:not(.feat--speechToText) #btnMic       { display: none !important; }
 body:not(.feat--vault)     #btnPasswords    { display: none !important; }
 body:not(.feat--extensionManager) #btnExtensions { display: none !important; }
+body:not(.feat--browserImport) #btnRestartWizard { display: none !important; }
 
 /* ── Setup-Wizard ── */
 .wstep {
@@ -2256,15 +2257,10 @@ function applyImportResult(res) {
     _wizSummary.bookmarks += newBm.length;
     renderBookmarksBar?.();
   }
-  // Verlauf in IndexedDB schreiben
+  // Verlauf in RAM-Cache + IndexedDB schreiben (via storage.js, wo _historyCache sichtbar ist)
   if (res.data?.history?.length > 0) {
-    res.data.history.forEach(h => historyIdbAdd(h.url, h.title, h.ts));
-    if (_historyCache) {
-      _historyCache.push(...res.data.history);
-      _historyCache.sort((a,b) => b.ts - a.ts);
-      if (_historyCache.length > 10000) _historyCache.length = 10000;
-    }
-    _wizSummary.history += res.data.history.length;
+    const added = importHistoryEntries(res.data.history);
+    _wizSummary.history += added;
   }
   // Passwörter in Vault importieren
   if (res.data?.passwords?.length > 0) {
@@ -2301,7 +2297,14 @@ function renderWizardFeatureList() {
 }
 
 // Wizard-Schaltflächen verdrahten
-document.getElementById('wizBtnStart').addEventListener('click', () => wizGotoStep(1));
+document.getElementById('wizBtnStart').addEventListener('click', () => {
+  if (cfg.features?.browserImport === false) {
+    wizGotoStep(2);
+    renderWizardFeatureList();
+  } else {
+    wizGotoStep(1);
+  }
+});
 
 document.getElementById('wizSkipImport').addEventListener('click', () => {
   wizGotoStep(2);

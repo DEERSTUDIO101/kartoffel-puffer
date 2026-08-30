@@ -126,6 +126,24 @@ function saveHistory(h) {
   h.forEach(e => historyIdbAdd(e.url, e.title, e.ts));
 }
 
+// Verlauf aus Import in RAM-Cache + IDB schreiben (cross-scope: _historyCache ist hier sichtbar)
+function importHistoryEntries(entries) {
+  if (!Array.isArray(entries) || entries.length === 0) return 0;
+  if (!_historyCache) _historyCache = [];
+  const existingUrls = new Set(_historyCache.map(e => e.url));
+  let added = 0;
+  entries.forEach(h => {
+    if (!existingUrls.has(h.url)) {
+      _historyCache.unshift({ url: h.url, title: h.title || h.url, ts: h.ts || Date.now() });
+      existingUrls.add(h.url);
+      added++;
+    }
+    historyIdbAdd(h.url, h.title || h.url, h.ts || Date.now());
+  });
+  if (_historyCache.length > 10000) _historyCache.length = 10000;
+  return added;
+}
+
 // Fehlende Feature-Keys mit true auffüllen (Backwards-Compat für bestehende Installs)
 function ensureFeatureDefaults() {
   if (!cfg.features || typeof cfg.features !== 'object') cfg.features = {};
