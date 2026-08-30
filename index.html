@@ -529,6 +529,15 @@ body:not(.feat--aiWindow)  #aiSidebar-detach { display: none !important; }
 body:not(.feat--speechToText) #btnMic       { display: none !important; }
 body:not(.feat--vault)     #btnPasswords    { display: none !important; }
 body:not(.feat--extensionManager) #btnExtensions { display: none !important; }
+
+/* ── Setup-Wizard ── */
+.wstep {
+  width: 28px; height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,.15); transition: background .2s;
+}
+.wstep.active { background: var(--accent); }
+.wiz-page { animation: wizFadeIn .2s ease; }
+@keyframes wizFadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
 </style>
 </head>
 <body>
@@ -607,6 +616,76 @@ body:not(.feat--extensionManager) #btnExtensions { display: none !important; }
 
 <!-- Toast -->
 <div id="toast"></div>
+
+<!-- ── Setup-Wizard ── -->
+<div id="wizardOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg);overflow-y:auto">
+  <div style="min-height:100%;display:flex;align-items:center;justify-content:center;padding:2rem">
+    <div id="wizardBox" style="width:min(620px,96vw);display:flex;flex-direction:column;gap:1.5rem">
+
+      <!-- Step indicators -->
+      <div id="wizardSteps" style="display:flex;gap:.5rem;justify-content:center">
+        <div class="wstep active" data-s="0"></div>
+        <div class="wstep" data-s="1"></div>
+        <div class="wstep" data-s="2"></div>
+        <div class="wstep" data-s="3"></div>
+      </div>
+
+      <!-- Schritt 0: Willkommen -->
+      <div id="wiz-0" class="wiz-page">
+        <div style="text-align:center;padding:2rem 0">
+          <div style="font-size:64px;margin-bottom:1rem">🥔</div>
+          <h1 style="font-size:1.8rem;font-weight:700;margin-bottom:.5rem">Kartoffel Puffer</h1>
+          <p style="color:var(--muted);margin-bottom:2rem">Lass uns den Browser auf deinen Workflow einrichten.</p>
+          <button class="s-btn primary" id="wizBtnStart" style="padding:.75rem 2.5rem;font-size:1rem">Los geht's →</button>
+        </div>
+      </div>
+
+      <!-- Schritt 1: Import -->
+      <div id="wiz-1" class="wiz-page" style="display:none">
+        <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:.3rem">Daten importieren</h2>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:1.2rem">Lesezeichen, Passwörter und Verlauf aus einem anderen Browser übernehmen.</p>
+        <div id="wizBrowserList" style="display:flex;flex-direction:column;gap:.5rem;margin-bottom:1rem">
+          <div style="color:var(--muted);font-size:13px">Suche nach installierten Browsern…</div>
+        </div>
+        <!-- Manueller Import -->
+        <div style="border-top:1px solid var(--panel-border);padding-top:1rem;margin-top:.5rem">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:.5rem">Oder Datei auswählen:</div>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+            <button class="s-btn" id="wizImportBmHtml">📄 Lesezeichen-HTML</button>
+            <button class="s-btn" id="wizImportPwCsv">🔑 Passwörter-CSV</button>
+          </div>
+        </div>
+        <div id="wizImportStatus" style="font-size:12px;color:var(--accent);margin-top:.5rem;min-height:1.2em"></div>
+        <div style="display:flex;justify-content:space-between;margin-top:1.5rem">
+          <button class="s-btn" id="wizSkipImport">Überspringen</button>
+          <button class="s-btn primary" id="wizNextToFeatures">Weiter →</button>
+        </div>
+      </div>
+
+      <!-- Schritt 2: Features -->
+      <div id="wiz-2" class="wiz-page" style="display:none">
+        <h2 style="font-size:1.2rem;font-weight:600;margin-bottom:.3rem">Welche Features möchtest du nutzen?</h2>
+        <p style="color:var(--muted);font-size:13px;margin-bottom:1rem">Du kannst das jederzeit in den Einstellungen ändern.</p>
+        <div id="wizFeatureList" style="display:flex;flex-direction:column;gap:.4rem;max-height:50vh;overflow-y:auto"></div>
+        <div style="display:flex;justify-content:space-between;margin-top:1.5rem">
+          <button class="s-btn" id="wizBackToImport">← Zurück</button>
+          <button class="s-btn primary" id="wizNextToDone">Weiter →</button>
+        </div>
+      </div>
+
+      <!-- Schritt 3: Fertig -->
+      <div id="wiz-3" class="wiz-page" style="display:none">
+        <div style="text-align:center;padding:2rem 0">
+          <div style="font-size:64px;margin-bottom:1rem">✅</div>
+          <h2 style="font-size:1.4rem;font-weight:700;margin-bottom:.5rem">Alles bereit!</h2>
+          <div id="wizSummary" style="color:var(--muted);font-size:13px;margin-bottom:2rem;line-height:1.7"></div>
+          <button class="s-btn primary" id="wizFinish" style="padding:.75rem 2.5rem;font-size:1rem">Browser starten 🚀</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
 
 <!-- Berechtigungs-Abfrage -->
 <div id="permPrompt">
@@ -2084,6 +2163,207 @@ document.addEventListener('mousedown', e => {
 const _restoredUrls = cfg.restoreSession ? loadSessionTabs() : [];
 if (_restoredUrls.length) { _restoredUrls.forEach(u => createTab(u)); }
 else { createTab('newtab'); }
+
+// ── SETUP-WIZARD ──────────────────────────────────────────────────────────────
+let _wizStep = 0;
+let _wizSummary = { bookmarks: 0, passwords: 0, history: 0 };
+
+function showWizard() {
+  _wizStep = 0;
+  _wizSummary = { bookmarks: 0, passwords: 0, history: 0 };
+  document.getElementById('wizardOverlay').style.display = '';
+  wizGotoStep(0);
+  // Browser-Erkennung starten sobald der Wizard sichtbar ist
+  loadWizardBrowserList();
+}
+
+function wizGotoStep(n) {
+  _wizStep = n;
+  document.querySelectorAll('.wiz-page').forEach((el, i) => {
+    el.style.display = i === n ? '' : 'none';
+  });
+  document.querySelectorAll('.wstep').forEach((el, i) => {
+    el.classList.toggle('active', i === n);
+  });
+}
+
+function closeWizard() {
+  document.getElementById('wizardOverlay').style.display = 'none';
+  document.getElementById('wizardOverlay').remove();
+}
+
+async function loadWizardBrowserList() {
+  const list = document.getElementById('wizBrowserList');
+  if (!list) return;
+  list.innerHTML = '<div style="color:var(--muted);font-size:13px">Suche…</div>';
+  const browsers = await window.electronAPI.browserImport.detect().catch(() => []);
+  if (browsers.length === 0) {
+    list.innerHTML = '<div style="color:var(--muted);font-size:13px">Keine installierten Browser gefunden.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  browsers.forEach(b => {
+    const types = [
+      b.hasBookmarks && 'bookmarks',
+      b.hasPasswords && 'passwords',
+      b.hasHistory   && 'history',
+    ].filter(Boolean);
+
+    const card = document.createElement('div');
+    card.style.cssText = 'background:rgba(255,255,255,.04);border:1px solid var(--panel-border);border-radius:8px;padding:.7rem 1rem';
+    card.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+        <span style="font-weight:500">${b.name}</span>
+        <button class="s-btn primary wiz-import-btn" data-browser="${b.id}" style="font-size:12px;padding:.25rem .75rem">
+          Importieren
+        </button>
+      </div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        ${types.map(t => `<label style="display:flex;align-items:center;gap:.3rem;font-size:12px;cursor:pointer">
+          <input type="checkbox" class="wiz-type-cb" data-browser="${b.id}" data-type="${t}" checked/>
+          ${t === 'bookmarks' ? 'Lesezeichen' : t === 'passwords' ? 'Passwörter' : 'Verlauf'}
+        </label>`).join('')}
+      </div>`;
+    const btn = card.querySelector('.wiz-import-btn');
+    btn.addEventListener('click', async () => {
+      const selectedTypes = [...card.querySelectorAll('.wiz-type-cb:checked')].map(c => c.dataset.type);
+      if (selectedTypes.length === 0) return;
+      btn.disabled = true;
+      btn.textContent = '…';
+      const status = document.getElementById('wizImportStatus');
+      status.textContent = `Importiere von ${b.name}…`;
+      try {
+        const res = await window.electronAPI.browserImport.run({ browser: b.id, types: selectedTypes });
+        applyImportResult(res);
+        status.textContent = `✓ ${b.name}: ${res.bookmarks} Lesezeichen, ${res.passwords} Passwörter, ${res.history} Verlauf-Einträge`;
+        btn.textContent = '✓ Fertig';
+      } catch (e) {
+        status.textContent = `Fehler: ${e.message}`;
+        btn.disabled = false;
+        btn.textContent = 'Wiederholen';
+      }
+    });
+    list.appendChild(card);
+  });
+}
+
+function applyImportResult(res) {
+  // Lesezeichen in localStorage schreiben
+  if (res.data?.bookmarks?.length > 0) {
+    const existing = loadBookmarks();
+    const existingUrls = new Set(existing.map(b => b.url));
+    const newBm = res.data.bookmarks.filter(b => !existingUrls.has(b.url));
+    saveBookmarks([...newBm, ...existing]);
+    _wizSummary.bookmarks += newBm.length;
+    renderBookmarksBar?.();
+  }
+  // Verlauf in IndexedDB schreiben
+  if (res.data?.history?.length > 0) {
+    res.data.history.forEach(h => historyIdbAdd(h.url, h.title, h.ts));
+    if (_historyCache) {
+      _historyCache.push(...res.data.history);
+      _historyCache.sort((a,b) => b.ts - a.ts);
+      if (_historyCache.length > 10000) _historyCache.length = 10000;
+    }
+    _wizSummary.history += res.data.history.length;
+  }
+  // Passwörter in Vault importieren
+  if (res.data?.passwords?.length > 0) {
+    res.data.passwords.forEach(pw => {
+      window.electronAPI.passwords.save({ site: pw.site, username: pw.username, password: pw.password }).catch(() => {});
+    });
+    _wizSummary.passwords += res.data.passwords.length;
+  }
+  if (res.errors?.length > 0) console.warn('[Import]', res.errors);
+}
+
+function renderWizardFeatureList() {
+  const list = document.getElementById('wizFeatureList');
+  if (!list) return;
+  list.innerHTML = '';
+  ensureFeatureDefaults();
+  FEATURE_META.forEach(({ key, icon, label, desc }) => {
+    const enabled = cfg.features[key] !== false;
+    const row = document.createElement('label');
+    row.style.cssText = 'display:flex;align-items:center;gap:.75rem;padding:.5rem .7rem;background:rgba(255,255,255,.03);border-radius:6px;cursor:pointer';
+    row.innerHTML = `
+      <i data-lucide="${icon}" width="15" height="15" style="flex-shrink:0;color:var(--accent)"></i>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px">${label}</div>
+        <div style="font-size:11px;color:var(--muted)">${desc}</div>
+      </div>
+      <input type="checkbox" data-feat="${key}" ${enabled ? 'checked' : ''} style="width:16px;height:16px;accent-color:var(--accent)"/>`;
+    row.querySelector('input').addEventListener('change', e => {
+      cfg.features[key] = e.target.checked;
+    });
+    list.appendChild(row);
+  });
+  if (window.lucide) lucide.createIcons({ nodes: [list] });
+}
+
+// Wizard-Schaltflächen verdrahten
+document.getElementById('wizBtnStart').addEventListener('click', () => wizGotoStep(1));
+
+document.getElementById('wizSkipImport').addEventListener('click', () => {
+  wizGotoStep(2);
+  renderWizardFeatureList();
+});
+document.getElementById('wizNextToFeatures').addEventListener('click', () => {
+  wizGotoStep(2);
+  renderWizardFeatureList();
+});
+document.getElementById('wizBackToImport').addEventListener('click', () => wizGotoStep(1));
+
+document.getElementById('wizNextToDone').addEventListener('click', () => {
+  saveSettings();
+  applyFeatureFlags();
+  wizGotoStep(3);
+  const s = _wizSummary;
+  const lines = [];
+  if (s.bookmarks > 0) lines.push(`${s.bookmarks} Lesezeichen importiert`);
+  if (s.passwords > 0) lines.push(`${s.passwords} Passwörter importiert`);
+  if (s.history   > 0) lines.push(`${s.history} Verlauf-Einträge importiert`);
+  const active = FEATURE_META.filter(f => cfg.features[f.key] !== false).length;
+  lines.push(`${active} von ${FEATURE_META.length} Features aktiv`);
+  document.getElementById('wizSummary').innerHTML = lines.join('<br>');
+});
+
+document.getElementById('wizFinish').addEventListener('click', () => {
+  saveSettings();
+  applyFeatureFlags();
+  closeWizard();
+});
+
+document.getElementById('wizImportBmHtml').addEventListener('click', async () => {
+  const filePath = await window.electronAPI.openFilePicker({ filters: [{ name: 'HTML', extensions: ['html','htm'] }] });
+  if (!filePath) return;
+  const status = document.getElementById('wizImportStatus');
+  status.textContent = 'Importiere…';
+  const res = await window.electronAPI.browserImport.fromFile({ type: 'bookmarks', filePath });
+  applyImportResult({ data: { bookmarks: res.data.bookmarks, passwords: [], history: [] }, errors: res.errors });
+  status.textContent = `✓ ${res.count} Lesezeichen importiert`;
+});
+
+document.getElementById('wizImportPwCsv').addEventListener('click', async () => {
+  const filePath = await window.electronAPI.openFilePicker({ filters: [{ name: 'CSV', extensions: ['csv'] }] });
+  if (!filePath) return;
+  const status = document.getElementById('wizImportStatus');
+  status.textContent = 'Importiere…';
+  const res = await window.electronAPI.browserImport.fromFile({ type: 'passwords', filePath });
+  applyImportResult({ data: { bookmarks: [], passwords: res.data.passwords, history: [] }, errors: res.errors });
+  status.textContent = `✓ ${res.count} Passwörter importiert`;
+});
+
+// ── First-Run-Erkennung ───────────────────────────────────────────────────────
+function checkFirstRun() {
+  const isFirstRun = !localStorage.getItem('kp-settings-v3');
+  if (isFirstRun) {
+    // Kurze Verzögerung damit der Browser vollständig initialisiert ist
+    setTimeout(showWizard, 300);
+  }
+}
+
+checkFirstRun();
 </script>
 </body>
 </html>
