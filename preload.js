@@ -92,4 +92,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearData: (opts) => ipcRenderer.invoke('data:clear', opts),
   onDownloadsUpdate: (cb) => on1('downloads-update', (_e, list) => cb(list)),
   onUpdateStatus:    (cb) => on1('update-status',    (_e, data) => cb(data)),
+
+  // Browser-Import (Lesezeichen, Passwörter, Verlauf aus installierten Browsern)
+  browserImport: {
+    detect:   ()     => ipcRenderer.invoke('import:detectBrowsers'),
+    run:      (args) => ipcRenderer.invoke('import:run', args),
+    fromFile: (args) => ipcRenderer.invoke('import:fromFile', args),
+  },
+  openFilePicker: (opts) => ipcRenderer.invoke('dialog:openFile', opts),
 });

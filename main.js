@@ -5,6 +5,7 @@ const { autoUpdater } = require('electron-updater');
 const vault  = require('./vault.js');
 const { ElectronBlocker } = require('@ghostery/adblocker-electron');
 const fetch  = require('cross-fetch');
+const browserImport = require('./js/browser-import.js');
 
 // Ghostery hängt sich global in app.on('web-contents-created') ein und versucht
 // auch in AI-Window-Webviews zu injizieren. Beim Schließen des AI-Fensters feuert
@@ -751,4 +752,45 @@ ipcMain.handle('page:save', async (_e, wcId) => {
     ],
   });
   if (!canceled && filePath) wc.savePage(filePath, 'HTMLComplete').catch(() => {});
+});
+
+// ── IPC: Browser-Import ───────────────────────────────────────────────────────
+ipcMain.handle('import:detectBrowsers', () => {
+  return browserImport.detectBrowsers();
+});
+
+ipcMain.handle('import:run', async (_e, args) => {
+  const result = browserImport.runImport(args);
+  const payload = {
+    bookmarks: result.bookmarks,
+    passwords: result.passwords,
+    history:   result.history,
+    errors:    result.errors,
+    data: {
+      bookmarks: result._bookmarks || [],
+      passwords: result._passwords || [],
+      history:   result._history   || [],
+    },
+  };
+  return payload;
+});
+
+ipcMain.handle('import:fromFile', async (_e, args) => {
+  const result = browserImport.importFromFile(args);
+  return {
+    count:  result.count,
+    errors: result.errors,
+    data: {
+      bookmarks: result._bookmarks || [],
+      passwords: result._passwords || [],
+    },
+  };
+});
+
+ipcMain.handle('dialog:openFile', async (_e, opts = {}) => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWin, {
+    properties: ['openFile'],
+    ...opts,
+  });
+  return canceled || !filePaths?.[0] ? null : filePaths[0];
 });
