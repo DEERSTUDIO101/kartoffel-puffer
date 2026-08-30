@@ -360,17 +360,19 @@ function attachWebviewEvents(wv, id) {
     );
 
     // ── DESIGN-TOOLS ─────────────────────────────────────────────────────────
-    items.push(
-      '-',
-      { label: '🎨 Farbe aufnehmen', click: async () => {
+    const designItems = [];
+    if (cfg.features?.eyedropper !== false) {
+      designItems.push({ label: '🎨 Farbe aufnehmen', click: async () => {
         if (!window.EyeDropper) { showToast('EyeDropper-API nicht unterstützt'); return; }
         try {
           const res = await new EyeDropper().open();
           await navigator.clipboard.writeText(res.sRGBHex);
           showColorToast(res.sRGBHex);
-        } catch {} // Abgebrochen per Esc → ignorieren
-      }},
-      { label: '🔤 Schrift inspizieren', click: () => {
+        } catch {}
+      }});
+    }
+    if (cfg.features?.fontInspector !== false) {
+      designItems.push({ label: '🔤 Schrift inspizieren', click: () => {
         const cx = p.x, cy = p.y;
         wv.executeJavaScript(`
           (function(){
@@ -382,36 +384,34 @@ function attachWebviewEvents(wv, id) {
             var s = window.getComputedStyle(el);
             return {
               tag: el.tagName.toLowerCase(),
-              fontFamily: s.fontFamily,
-              fontSize: s.fontSize,
-              fontWeight: s.fontWeight,
-              fontStyle: s.fontStyle,
-              lineHeight: s.lineHeight,
-              letterSpacing: s.letterSpacing,
-              color: s.color,
-              textAlign: s.textAlign,
+              fontFamily: s.fontFamily, fontSize: s.fontSize,
+              fontWeight: s.fontWeight, fontStyle: s.fontStyle,
+              lineHeight: s.lineHeight, letterSpacing: s.letterSpacing,
+              color: s.color, textAlign: s.textAlign,
             };
           })()
         `).then(info => {
           if (info) showFontInspector(info, wvRect.left + cx, wvRect.top + cy);
         }).catch(() => {});
-      }},
-    );
+      }});
+    }
+    if (designItems.length > 0) items.push('-', ...designItems);
 
     // ── GERÄTEVORSCHAU ──────────────────────────────────────────────────
-    items.push(
-      '-',
-      { label: '📱 Gerätevorschau', submenu: [
-        { label: '🖥  Desktop',                 click: () => setDevicePreview(null) },
+    if (cfg.features?.devicePreview !== false) {
+      items.push(
         '-',
-        // ▯ = hochkant (Höhe > Breite), ▭ = quer (Breite > Höhe)
-        { label: '▯  Tablet  768×1024',         click: () => setDevicePreview('tab-v', 768, 1024) },
-        { label: '▭  Tablet quer  1024×768',    click: () => setDevicePreview('tab-h', 1024, 768) },
-        '-',
-        { label: '▯  Smartphone  390×844',      click: () => setDevicePreview('mob-v', 390, 844) },
-        { label: '▭  Smartphone quer  844×390', click: () => setDevicePreview('mob-h', 844, 390) },
-      ]},
-    );
+        { label: '📱 Gerätevorschau', submenu: [
+          { label: '🖥  Desktop',                 click: () => setDevicePreview(null) },
+          '-',
+          { label: '▯  Tablet  768×1024',         click: () => setDevicePreview('tab-v', 768, 1024) },
+          { label: '▭  Tablet quer  1024×768',    click: () => setDevicePreview('tab-h', 1024, 768) },
+          '-',
+          { label: '▯  Smartphone  390×844',      click: () => setDevicePreview('mob-v', 390, 844) },
+          { label: '▭  Smartphone quer  844×390', click: () => setDevicePreview('mob-h', 844, 390) },
+        ]},
+      );
+    }
 
     items.push(
       '-',
