@@ -662,6 +662,7 @@ body:not(.feat--extensionManager) #btnExtensions { display: none !important; }
         <div class="snav-item" data-page="browser"><i data-lucide="globe" width="14" height="14"></i><span data-i18n="general">Browser</span></div>
         <div class="snav-item" data-page="ai"><i data-lucide="bot" width="14" height="14"></i><span data-i18n="aiSidebar">AI</span></div>
         <div class="snav-item" data-page="privacy"><i data-lucide="shield" width="14" height="14"></i><span data-i18n="privacy">Datenschutz</span></div>
+        <div class="snav-item" data-page="features"><i data-lucide="sliders" width="14" height="14"></i><span>Features</span></div>
         <div class="snav-item" data-page="about"><i data-lucide="info" width="14" height="14"></i><span data-i18n="about">Info</span></div>
       </div>
       <!-- Content -->
@@ -905,6 +906,22 @@ body:not(.feat--extensionManager) #btnExtensions { display: none !important; }
             <div id="updateStatusText" style="font-size:13px;color:var(--muted);margin-bottom:.7rem">Noch nicht geprüft</div>
             <button class="s-btn primary" id="btnCheckUpdate" style="width:100%">Nach Updates suchen</button>
             <button class="s-btn primary" id="btnInstallUpdate" style="width:100%;margin-top:.5rem;display:none">Update installieren &amp; neu starten</button>
+          </div>
+        </div>
+
+        <!-- Features -->
+        <div class="s-page" id="s-features">
+          <div class="s-section">
+            <div class="s-label">Browser-Features</div>
+            <div class="s-desc" style="font-size:12px;color:var(--muted);margin-bottom:.8rem">
+              Aktiviere oder deaktiviere einzelne Features. Änderungen wirken sofort.
+            </div>
+            <div id="featureCardList" style="display:flex;flex-direction:column;gap:.5rem"></div>
+          </div>
+          <div class="s-section" style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--panel-border)">
+            <button class="s-btn" id="btnRestartWizard" style="width:100%">
+              🧙 Setup-Wizard erneut starten
+            </button>
           </div>
         </div>
 
@@ -1800,7 +1817,65 @@ function bindSettingsListeners() {
   document.getElementById('resetSettings')?.addEventListener('click',()=>{if(confirm('Alle Einstellungen zurücksetzen?')){cfg={...defaultSettings};saveSettings();applySettings();syncSettingsUI();showToast('Einstellungen zurückgesetzt');}});
   document.getElementById('settingsOverlay')?.addEventListener('click',e=>{if(e.target===document.getElementById('settingsOverlay'))closeSettings();});
   document.getElementById('closeSettingsBtn')?.addEventListener('click',closeSettings);
+  renderFeatureCards();
 }
+
+const FEATURE_META = [
+  { key: 'aiSidebar',        icon: 'bot',               label: 'AI-Sidebar',              desc: 'Eingebettete AI-Sidebar im Browserfenster' },
+  { key: 'aiWindow',         icon: 'external-link',     label: 'AI-Assistenten-Fenster',  desc: 'Separates always-on-top Fenster mit AI-Anbietern' },
+  { key: 'speechToText',     icon: 'mic',               label: 'Sprache-zu-Text',          desc: 'Diktierfunktion in der URL-Leiste' },
+  { key: 'vault',            icon: 'key-round',         label: 'Passwort-Tresor',          desc: 'Verschlüsselter Passwort-Manager mit Autofill' },
+  { key: 'extensionManager', icon: 'puzzle',            label: 'Erweiterungs-Verwaltung',  desc: 'Benutzerdefinierte Browser-Erweiterungen laden' },
+  { key: 'eyedropper',       icon: 'pipette',           label: 'Farbpipette',             desc: 'Farben von Webseiten aufnehmen (Rechtsklick-Menü)' },
+  { key: 'fontInspector',    icon: 'type',              label: 'Schrift-Inspektor',        desc: 'Schriftart-Informationen von Elementen (Rechtsklick)' },
+  { key: 'devicePreview',    icon: 'monitor-smartphone',label: 'Gerätevorschau',          desc: 'Responsive-Vorschau im Rechtsklick-Menü' },
+  { key: 'uiBuilder',        icon: 'layout-dashboard',  label: 'UI-Editor',               desc: 'Drag-and-Drop Toolbar-Layout-Editor' },
+  { key: 'browserImport',    icon: 'download',          label: 'Browser-Import',           desc: 'Daten aus anderen Browsern importieren' },
+];
+
+function renderFeatureCards() {
+  const list = document.getElementById('featureCardList');
+  if (!list) return;
+  list.innerHTML = '';
+  ensureFeatureDefaults();
+  FEATURE_META.forEach(({ key, icon, label, desc }) => {
+    const enabled = cfg.features[key] !== false;
+    const card = document.createElement('div');
+    card.style.cssText = 'display:flex;align-items:center;gap:.75rem;padding:.6rem .8rem;background:rgba(255,255,255,.04);border-radius:8px;border:1px solid var(--panel-border)';
+    card.innerHTML = `
+      <i data-lucide="${icon}" width="16" height="16" style="flex-shrink:0;color:var(--accent)"></i>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:500">${label}</div>
+        <div style="font-size:11px;color:var(--muted)">${desc}</div>
+      </div>
+      <label style="display:flex;align-items:center;cursor:pointer;flex-shrink:0">
+        <input type="checkbox" data-feat="${key}" ${enabled ? 'checked' : ''} style="display:none"/>
+        <span class="feat-toggle ${enabled ? 'on' : ''}" style="
+          width:36px;height:20px;border-radius:10px;background:${enabled ? 'var(--accent)' : 'rgba(255,255,255,.12)'};
+          position:relative;transition:background .15s;display:block">
+          <span style="position:absolute;top:3px;left:${enabled ? '19px' : '3px'};width:14px;height:14px;
+            border-radius:50%;background:#fff;transition:left .15s"></span>
+        </span>
+      </label>`;
+    const cb = card.querySelector('input[type=checkbox]');
+    const toggle = card.querySelector('.feat-toggle');
+    const knob = toggle.querySelector('span');
+    cb.addEventListener('change', () => {
+      cfg.features[key] = cb.checked;
+      toggle.style.background = cb.checked ? 'var(--accent)' : 'rgba(255,255,255,.12)';
+      knob.style.left = cb.checked ? '19px' : '3px';
+      saveSettings();
+      applyFeatureFlags();
+    });
+    list.appendChild(card);
+  });
+  if (window.lucide) lucide.createIcons({ nodes: [list] });
+}
+
+document.getElementById('btnRestartWizard')?.addEventListener('click', () => {
+  closeSettings();
+  showWizard();
+});
 
 function applyThemePreset(theme) {
   const presets={
