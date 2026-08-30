@@ -1687,6 +1687,7 @@ function syncSettingsUI() {
   renderQuickLinks();
   renderAiProviderSettings();
   document.querySelectorAll('.layout-opt').forEach(el => el.classList.toggle('selected', cfg[el.dataset.layoutKey]===el.dataset.layoutVal));
+  renderFeatureCards();
 }
 
 function setCP(pid, sid, val) {
@@ -1817,7 +1818,6 @@ function bindSettingsListeners() {
   document.getElementById('resetSettings')?.addEventListener('click',()=>{if(confirm('Alle Einstellungen zurücksetzen?')){cfg={...defaultSettings};saveSettings();applySettings();syncSettingsUI();showToast('Einstellungen zurückgesetzt');}});
   document.getElementById('settingsOverlay')?.addEventListener('click',e=>{if(e.target===document.getElementById('settingsOverlay'))closeSettings();});
   document.getElementById('closeSettingsBtn')?.addEventListener('click',closeSettings);
-  renderFeatureCards();
 }
 
 const FEATURE_META = [
