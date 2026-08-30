@@ -2338,9 +2338,13 @@ document.getElementById('wizImportBmHtml').addEventListener('click', async () =>
   if (!filePath) return;
   const status = document.getElementById('wizImportStatus');
   status.textContent = 'Importiere…';
-  const res = await window.electronAPI.browserImport.fromFile({ type: 'bookmarks', filePath });
-  applyImportResult({ data: { bookmarks: res.data.bookmarks, passwords: [], history: [] }, errors: res.errors });
-  status.textContent = `✓ ${res.count} Lesezeichen importiert`;
+  try {
+    const res = await window.electronAPI.browserImport.fromFile({ type: 'bookmarks', filePath });
+    applyImportResult({ data: { bookmarks: res.data?.bookmarks || [], passwords: [], history: [] }, errors: res.errors });
+    status.textContent = `✓ ${res.count} Lesezeichen importiert`;
+  } catch (e) {
+    status.textContent = `Fehler: ${e.message}`;
+  }
 });
 
 document.getElementById('wizImportPwCsv').addEventListener('click', async () => {
@@ -2348,9 +2352,13 @@ document.getElementById('wizImportPwCsv').addEventListener('click', async () => 
   if (!filePath) return;
   const status = document.getElementById('wizImportStatus');
   status.textContent = 'Importiere…';
-  const res = await window.electronAPI.browserImport.fromFile({ type: 'passwords', filePath });
-  applyImportResult({ data: { bookmarks: [], passwords: res.data.passwords, history: [] }, errors: res.errors });
-  status.textContent = `✓ ${res.count} Passwörter importiert`;
+  try {
+    const res = await window.electronAPI.browserImport.fromFile({ type: 'passwords', filePath });
+    applyImportResult({ data: { bookmarks: [], passwords: res.data?.passwords || [], history: [] }, errors: res.errors });
+    status.textContent = `✓ ${res.count} Passwörter importiert`;
+  } catch (e) {
+    status.textContent = `Fehler: ${e.message}`;
+  }
 });
 
 // ── First-Run-Erkennung ───────────────────────────────────────────────────────
