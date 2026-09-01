@@ -29,7 +29,7 @@ const defaultSettings = {
   aiSidebarPos:'right', aiSidebarWidth:360,
   aiEnabledProviders:['claude','chatgpt','gemini','perplexity','copilot','grok','deepseek','mistral'],
   aiAutoCtx:false, aiActiveProvider:'claude',
-  speechApiKey:'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',
+  speechApiKey:'',
   tabBarPos:'top', navButtonOrder:[], navButtonHidden:[],
   features: {
     devicePreview:    true,

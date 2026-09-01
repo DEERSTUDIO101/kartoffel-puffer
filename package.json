@@ -1,6 +1,7 @@
 {
   "name": "kartoffel-puffer",
   "version": "0.3.2",
+  "author": "DEERSTUDI101 or FISH :D",
   "private": true,
   "description": "Kartoffel Puffer – eigener Chromium-Browser auf Electron-Basis",
   "main": "main.js",
@@ -43,7 +44,6 @@
       "!node_modules/plist/**",
       "!node_modules/lucide/**",
       "!node_modules/cross-fetch/node-ponyfill.js",
-      "!node_modules/@ghostery/adblocker-electron/**",
       "!node_modules/better-sqlite3/deps/**",
       "!node_modules/better-sqlite3/src/**",
       "!node_modules/better-sqlite3/docs/**",

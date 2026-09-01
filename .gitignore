@@ -3,3 +3,5 @@ dist/
 vercel-updates/
 *.log
 .env
+
+.vercel
