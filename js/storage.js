@@ -165,3 +165,43 @@ function applyFeatureFlags() {
 function loadSessionTabs() {
   try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '[]'); } catch { return []; }
 }
+
+const GROUPS_KEY = 'kp-tab-groups-v1';
+
+function loadGroups() {
+  try { return JSON.parse(localStorage.getItem(GROUPS_KEY) || '[]'); } catch { return []; }
+}
+function saveGroups(groups) {
+  localStorage.setItem(GROUPS_KEY, JSON.stringify(groups));
+}
+
+// Speichert vollständige Session: Tab-Objekte + Gruppen-Array + aktiver Index.
+// Ersetzt das alte flache URL-Array; loadSession() versteht beide Formate.
+function saveSession(tabsArr, groupsArr, activeIdx) {
+  const data = {
+    tabs: tabsArr.filter(t => !t.incognito && !t.isNewTab && t.url).map(t => ({
+      url: t.url, title: t.title || t.url, groupId: t.groupId || null
+    })),
+    groups: groupsArr || [],
+    activeIndex: activeIdx || 0,
+  };
+  localStorage.setItem(SESSION_KEY, JSON.stringify(data));
+}
+
+// Liest Session zurück. Versteht altes Format (flaches Array) und neues (Objekt).
+function loadSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return { tabs: [], groups: [], activeIndex: 0 };
+    const parsed = JSON.parse(raw);
+    // Altes Format: flaches URL-Array
+    if (Array.isArray(parsed)) {
+      return { tabs: parsed.map(url => ({ url, title: url, groupId: null })), groups: [], activeIndex: 0 };
+    }
+    return {
+      tabs: Array.isArray(parsed.tabs) ? parsed.tabs : [],
+      groups: Array.isArray(parsed.groups) ? parsed.groups : [],
+      activeIndex: typeof parsed.activeIndex === 'number' ? parsed.activeIndex : 0,
+    };
+  } catch { return { tabs: [], groups: [], activeIndex: 0 }; }
+}
