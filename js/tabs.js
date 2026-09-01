@@ -626,7 +626,7 @@ function renderTabBar() {
       e.dataTransfer.dropEffect = 'move';
       el.style.outline = '2px solid var(--accent)';
     });
-    el.addEventListener('dragleave', () => { el.style.outline = ''; });
+    el.addEventListener('dragleave', e => { if (!el.contains(e.relatedTarget)) el.style.outline = ''; });
     el.addEventListener('drop', e => {
       e.preventDefault();
       el.style.outline = '';
