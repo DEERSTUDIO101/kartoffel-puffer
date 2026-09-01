@@ -1,5 +1,5 @@
 /**
- * vault.js – lokaler Passwort-Speicher für Kartoffel Puffer (NW.js)
+ * vault.js – lokaler Passwort-Speicher für Kartoffel Puffer
  *
  * Sicherheitsmodell:
  *  1. AES-256-GCM: Alle Einträge + Chaff werden verschlüsselt.
@@ -33,6 +33,9 @@ const SCRYPT_R = 8;
 const SCRYPT_P = 1;
 const SCRYPT_MAXMEM = 256 * 1024 * 1024;
 
+const MAGIC   = Buffer.from('KPVK');   // 4-byte magic header for master.key v1
+const VERSION = 0x01;
+
 let dataDir    = null;
 let vaultPath  = null;
 let masterPath = null;
@@ -40,6 +43,7 @@ let masterPath = null;
 // Der im RAM gehaltene, entschlüsselte Vault-Schlüssel
 let unlockedKey = null;
 let idleTimer   = null;
+let _onLockCallback = null;
 
 // ── Hilfsfunktionen ───────────────────────────────────────────────────────────
 
@@ -50,9 +54,9 @@ function _ensureInit() {
 function _touch() {
   if (idleTimer) clearTimeout(idleTimer);
   idleTimer = setTimeout(() => {
-    // Memory Zeroing: Key aus dem RAM löschen bevor genullt wird
     if (unlockedKey) { unlockedKey.fill(0); }
     unlockedKey = null;
+    if (_onLockCallback) _onLockCallback();
   }, IDLE_MS);
 }
 
@@ -65,15 +69,6 @@ function _machineFingerprint() {
   const os = require('os');
   const data = `${os.hostname()}\x00${os.userInfo().username}\x00${os.platform()}\x00${os.arch()}`;
   return crypto.createHash('sha256').update(data, 'utf8').digest();
-}
-
-/**
- * Berechnet den SHA-256-Hash dieser vault.js-Datei selbst.
- * Wird in master.key gespeichert um Manipulation zu erkennen.
- */
-function _selfHash() {
-  const code = require('fs').readFileSync(__filename);
-  return crypto.createHash('sha256').update(code).digest();
 }
 
 /**
@@ -258,11 +253,9 @@ function setup(masterPassword) {
   const encVaultKey = _aesEncrypt(wrapKey, vaultKey);
   wrapKey.fill(0); // Wrap-Key aus RAM löschen
 
-  // 5. Selbst-Hash von vault.js berechnen
-  const selfHash = _selfHash();
-
-  // 6. [SaltA (32B) | SaltB (32B) | SelfHash (32B) | verschlüsselter Vault-Key] speichern
-  fs.writeFileSync(masterPath, Buffer.concat([saltA, saltB, selfHash, encVaultKey]));
+  // 5. [MAGIC 4B | VERSION 1B | saltA 32B | saltB 32B | encVaultKey 60B] speichern
+  const header = Buffer.from([...MAGIC, VERSION]);
+  fs.writeFileSync(masterPath, Buffer.concat([header, saltA, saltB, encVaultKey]));
 
   // 7. Vault entsperren
   unlockedKey = vaultKey;
@@ -283,35 +276,48 @@ function unlock(masterPassword) {
   if (!isSetup()) return Promise.reject(new Error('Vault ist noch nicht eingerichtet'));
 
   try {
-    const buf = fs.readFileSync(masterPath);
-    const saltA       = buf.subarray(0, 32);
-    const saltB       = buf.subarray(32, 64);
-    const storedHash  = buf.subarray(64, 96);
-    const encVaultKey = buf.subarray(96);
+    const raw = fs.readFileSync(masterPath);
+    let saltA, saltB, encVaultKey, isLegacy = false;
 
-    // Selbst-Integritätsprüfung: vault.js wurde nicht manipuliert?
-    const currentHash = _selfHash();
-    if (!crypto.timingSafeEqual(storedHash, currentHash)) {
-      return Promise.reject(new Error(
-        'Sicherheitswarnung: vault.js wurde seit dem letzten Setup verändert! ' +
-        'Vault wurde gesperrt. Wenn du vault.js aktualisiert hast, musst du das ' +
-        'Passwort einmal neu setzen (Vault löschen und neu erstellen).'
-      ));
+    if (raw.subarray(0, 4).equals(MAGIC)) {
+      // v1: [MAGIC 4B | VERSION 1B | saltA 32B | saltB 32B | encVaultKey 60B]
+      saltA       = raw.subarray(5,  37);
+      saltB       = raw.subarray(37, 69);
+      encVaultKey = raw.subarray(69);
+    } else {
+      // Legacy: [saltA 32B | saltB 32B | selfHash 32B | encVaultKey 60B]
+      saltA       = raw.subarray(0,  32);
+      saltB       = raw.subarray(32, 64);
+      encVaultKey = raw.subarray(96);   // skip selfHash at [64:96]
+      isLegacy    = true;
     }
 
-    // Wrap-Key: PBKDF2→scrypt + Maschinen-Bindung
     const stretchedKey = _deriveKey(masterPassword, saltA, saltB);
-    const wrapKey        = _bindToMachine(stretchedKey);
-    stretchedKey.fill(0); // Temporären Key aus RAM löschen
+    const wrapKey      = _bindToMachine(stretchedKey);
+    stretchedKey.fill(0);
 
-    const vaultKey = _aesDecrypt(wrapKey, encVaultKey); // wirft bei falschem Passwort
-    wrapKey.fill(0); // Wrap-Key aus RAM löschen
+    const vaultKey = _aesDecrypt(wrapKey, encVaultKey); // throws on wrong password/bad tag
+    wrapKey.fill(0);
+
+    // Atomic migration: legacy → v1
+    if (isLegacy) {
+      const header  = Buffer.from([...MAGIC, VERSION]);
+      const newBuf  = Buffer.concat([header, saltA, saltB, encVaultKey]);
+      const tmpPath = masterPath + '.tmp';
+      fs.writeFileSync(tmpPath, newBuf);
+      // Validate temp file before replacing original
+      const verify = fs.readFileSync(tmpPath);
+      if (!verify.subarray(0, 4).equals(MAGIC)) {
+        fs.unlinkSync(tmpPath);
+        throw new Error('Migration validation failed');
+      }
+      fs.renameSync(tmpPath, masterPath); // atomic on NTFS
+    }
 
     unlockedKey = vaultKey;
     _touch();
     return Promise.resolve({ ok: true });
   } catch (err) {
-    if (err.message && err.message.startsWith('Sicherheitswarnung')) throw err;
     return Promise.reject(new Error('Falsches Master-Passwort'));
   }
 }
@@ -333,8 +339,8 @@ function changePassword(oldPassword, newPassword) {
     stretchedKey.fill(0);
     const encVaultKey = _aesEncrypt(wrapKey, unlockedKey);
     wrapKey.fill(0);
-    const selfHash = _selfHash();
-    fs.writeFileSync(masterPath, Buffer.concat([saltA, saltB, selfHash, encVaultKey]));
+    const header = Buffer.from([...MAGIC, VERSION]);
+    fs.writeFileSync(masterPath, Buffer.concat([header, saltA, saltB, encVaultKey]));
     _touch();
     return { ok: true };
   });
@@ -417,4 +423,15 @@ function remove(site, username) {
   return Promise.resolve({ ok: true });
 }
 
-module.exports = { init, isSetup, isLocked, setup, unlock, lock, changePassword, list, save, get, getPassword, remove };
+/**
+ * Registriert einen Callback, der beim automatischen Sperren (Idle-Timer) aufgerufen wird.
+ */
+function onAutoLock(cb) {
+  _onLockCallback = cb;
+}
+
+module.exports = {
+  init, isSetup, isLocked, setup, unlock, lock, changePassword,
+  list, save, get, getPassword, remove,
+  onAutoLock,
+};
