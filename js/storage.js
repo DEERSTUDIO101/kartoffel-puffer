@@ -183,8 +183,13 @@ function saveSession(tabsArr, groupsArr, activeIdx) {
       url: t.url, title: t.title || t.url, groupId: t.groupId || null
     })),
     groups: groupsArr || [],
-    activeIndex: activeIdx || 0,
+    activeIndex: 0,
   };
+  // activeIdx is an index into the full tabs array; compute the index within
+  // the filtered (persisted) subset so restore activates the right tab.
+  const activeTab = tabsArr[activeIdx];
+  const filteredActiveIdx = activeTab ? data.tabs.findIndex(t => t.url === activeTab.url) : -1;
+  data.activeIndex = filteredActiveIdx >= 0 ? filteredActiveIdx : 0;
   localStorage.setItem(SESSION_KEY, JSON.stringify(data));
 }
 
