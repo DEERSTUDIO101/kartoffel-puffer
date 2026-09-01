@@ -1,6 +1,6 @@
 {
   "name": "kartoffel-puffer",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "author": "DEERSTUDI101 or FISH :D",
   "private": true,
   "description": "Kartoffel Puffer – eigener Chromium-Browser auf Electron-Basis",
