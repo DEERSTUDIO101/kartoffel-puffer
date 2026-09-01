@@ -9,8 +9,8 @@
  *     das macht Offline-Brute-Force deutlich teurer.
  *  3. Maschinen-Bindung: Der Wrap-Key wird mit einem maschinenspezifischen
  *     HMAC kombiniert. master.key funktioniert NUR auf diesem PC-Konto.
- *  4. Selbst-Integritätsprüfung: SHA-256-Hash von vault.js wird in master.key
- *     gespeichert. Wenn jemand vault.js manipuliert, schlägt unlock() fehl.
+ *  4. Versioniertes master.key-Format (v1): KPVK-Magic + Versions-Byte ermöglichen
+ *     saubere Migration. AES-GCM liefert bereits Tamper-Detection (AuthTag).
  *  5. Memory Zeroing: Der Vault-Key wird nach lock() aus dem RAM gelöscht.
  *  6. Chaff: 50–150 Fake-Einträge + random Padding schützen selbst bei
  *     einem theoretischen AES-Bruch.
@@ -257,11 +257,11 @@ function setup(masterPassword) {
   const header = Buffer.from([...MAGIC, VERSION]);
   fs.writeFileSync(masterPath, Buffer.concat([header, saltA, saltB, encVaultKey]));
 
-  // 7. Vault entsperren
+  // 6. Vault entsperren
   unlockedKey = vaultKey;
   _touch();
 
-  // 8. Leere verschlüsselte Vault-Datei anlegen
+  // 7. Leere verschlüsselte Vault-Datei anlegen
   _write([]);
 
   return Promise.resolve({ ok: true });
@@ -275,6 +275,7 @@ function unlock(masterPassword) {
   _ensureInit();
   if (!isSetup()) return Promise.reject(new Error('Vault ist noch nicht eingerichtet'));
 
+  let authOk = false;
   try {
     const raw = fs.readFileSync(masterPath);
     let saltA, saltB, encVaultKey, isLegacy = false;
@@ -296,8 +297,13 @@ function unlock(masterPassword) {
     const wrapKey      = _bindToMachine(stretchedKey);
     stretchedKey.fill(0);
 
-    const vaultKey = _aesDecrypt(wrapKey, encVaultKey); // throws on wrong password/bad tag
-    wrapKey.fill(0);
+    let vaultKey;
+    try {
+      vaultKey = _aesDecrypt(wrapKey, encVaultKey); // throws on wrong password/bad tag
+    } finally {
+      wrapKey.fill(0);
+    }
+    authOk = true; // password was correct; any error below is an I/O error
 
     // Atomic migration: legacy → v1
     if (isLegacy) {
@@ -318,6 +324,7 @@ function unlock(masterPassword) {
     _touch();
     return Promise.resolve({ ok: true });
   } catch (err) {
+    if (authOk) throw err; // password was correct — re-throw I/O / migration errors
     return Promise.reject(new Error('Falsches Master-Passwort'));
   }
 }
