@@ -2243,6 +2243,64 @@ document.getElementById('tabSearch')?.addEventListener('mousedown', e => {
   if (e.target === document.getElementById('tabSearch')) closeTabSearch();
 });
 
+// ── Inline Prompt Modal (Ersatz für window.prompt(), das Electron nicht unterstützt) ──
+function showInlinePrompt(message, defaultValue) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'overlay';
+    overlay.style.cssText = 'display:flex;z-index:99999';
+
+    const box = document.createElement('div');
+    box.className = 'overlay-box';
+    box.style.cssText = 'max-width:360px;width:100%;padding:1.5rem;display:flex;flex-direction:column;gap:.75rem';
+
+    const label = document.createElement('div');
+    label.style.fontSize = '14px';
+    label.textContent = message;
+
+    const input = document.createElement('input');
+    input.className = 's-input';
+    input.type = 'text';
+    input.style.width = '100%';
+    input.value = defaultValue || '';
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:.5rem;justify-content:flex-end;margin-top:.25rem';
+
+    const btnCancel = document.createElement('button');
+    btnCancel.className = 's-btn';
+    btnCancel.textContent = 'Abbrechen';
+
+    const btnOk = document.createElement('button');
+    btnOk.className = 's-btn primary';
+    btnOk.textContent = 'OK';
+
+    btnRow.appendChild(btnCancel);
+    btnRow.appendChild(btnOk);
+    box.appendChild(label);
+    box.appendChild(input);
+    box.appendChild(btnRow);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    const close = (val) => { document.body.removeChild(overlay); resolve(val); };
+
+    setTimeout(() => { input.focus(); input.select(); }, 30);
+    btnOk.addEventListener('click', () => close(input.value));
+    btnCancel.addEventListener('click', () => close(null));
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  { e.preventDefault(); close(input.value); }
+      if (e.key === 'Escape') { e.preventDefault(); close(null); }
+    });
+  });
+}
+
+// ── Vor dem Schließen Session sichern (synchron, bevor das Fenster verschwindet) ──
+window.addEventListener('beforeunload', () => {
+  const activeIdx = tabs.findIndex(t => t.id === activeTabId);
+  saveSession(tabs, groups, Math.max(0, activeIdx));
+});
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
 loadSettings();
 applySettings();
@@ -2261,10 +2319,12 @@ document.addEventListener('mousedown', e => {
   if (panel.classList.contains('open') && !panel.contains(e.target)) panel.classList.remove('open');
 }, true);
 
+// Gruppen immer laden, unabhängig von der restoreSession-Einstellung
+groups = loadGroups();
+
 if (cfg.restoreSession) {
   const session = loadSession();
-  groups = session.groups || [];
-  saveGroups(groups);
+  if (session.groups && session.groups.length) { groups = session.groups; saveGroups(groups); }
   if (session.tabs.length) {
     session.tabs.forEach(t => {
       const tab = createTab(t.url);

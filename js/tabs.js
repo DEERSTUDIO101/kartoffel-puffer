@@ -504,6 +504,7 @@ function activateTab(id) {
     updateSecBadge(tab.url); updateBookmarkBtn(tab.url); updateAiCtxUrl();
   }
   renderTabBar();
+  saveSessionTabs();
 }
 
 function closeTab(id) {
@@ -518,6 +519,7 @@ function closeTab(id) {
   else activateTab(tabs[Math.min(idx, tabs.length-1)].id);
   renderTabBar();
   saveSessionTabs();
+  pruneEmptyGroups();
 }
 
 function generateGroupId() { return 'g' + Date.now().toString(36); }
@@ -539,6 +541,7 @@ function removeTabFromGroup(tab) {
   tab.groupId = null;
   saveSessionTabs();
   renderTabBar();
+  pruneEmptyGroups();
 }
 
 function renameGroup(groupId, newName) {
@@ -549,6 +552,13 @@ function renameGroup(groupId, newName) {
 function closeGroupTabs(groupId) {
   const toClose = tabs.filter(t => t.groupId === groupId).map(t => t.id);
   toClose.forEach(id => closeTab(id));
+}
+
+function pruneEmptyGroups() {
+  const usedIds = new Set(tabs.map(t => t.groupId).filter(Boolean));
+  const before = groups.length;
+  groups = groups.filter(g => usedIds.has(g.id));
+  if (groups.length !== before) saveGroups(groups);
 }
 
 function renderTabBar() {
@@ -582,8 +592,8 @@ function renderTabBar() {
           click: () => addTabToGroup(t, g.id),
         })),
         ...(groups.length ? ['-'] : []),
-        { label: '＋ Neue Gruppe…', click: () => {
-          const name = prompt('Gruppenname:', 'Neue Gruppe');
+        { label: '＋ Neue Gruppe…', click: async () => {
+          const name = await showInlinePrompt('Gruppenname:', 'Neue Gruppe');
           if (!name) return;
           const color = GROUP_COLORS[groups.length % GROUP_COLORS.length];
           const g = createGroup(name, color);
@@ -598,8 +608,8 @@ function renderTabBar() {
         { label: 'Zu Gruppe hinzufügen', submenu: groupSubmenu },
         ...(group ? [
           { label: `Aus Gruppe "${group.name}" entfernen`, click: () => removeTabFromGroup(t) },
-          { label: `Gruppe umbenennen…`, click: () => {
-            const name = prompt('Neuer Name:', group.name);
+          { label: `Gruppe umbenennen…`, click: async () => {
+            const name = await showInlinePrompt('Neuer Name:', group.name);
             if (name) renameGroup(group.id, name);
           }},
           { label: `Gruppe Farbe ändern`, submenu: GROUP_COLORS.map(c => ({
