@@ -40,6 +40,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     delete:   (site, user) => ipcRenderer.invoke('passwords:delete', site, user),
     unlock:   (pw)         => ipcRenderer.invoke('passwords:unlock', pw),
     lock:     ()           => ipcRenderer.invoke('passwords:lock'),
+    tryAutoUnlock:       ()  => ipcRenderer.invoke('passwords:tryAutoUnlock'),
+    setupAutoUnlock:     ()  => ipcRenderer.invoke('passwords:setupAutoUnlock'),
+    disableAutoUnlock:   ()  => ipcRenderer.invoke('passwords:disableAutoUnlock'),
+    autoUnlockAvailable: ()  => ipcRenderer.invoke('passwords:autoUnlockAvailable'),
+    isAutoUnlockEnabled: ()  => ipcRenderer.invoke('passwords:isAutoUnlockEnabled'),
   },
 
   // Shell
@@ -92,6 +97,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearData: (opts) => ipcRenderer.invoke('data:clear', opts),
   onDownloadsUpdate: (cb) => on1('downloads-update', (_e, list) => cb(list)),
   onUpdateStatus:    (cb) => on1('update-status',    (_e, data) => cb(data)),
+  onVaultStatus: (cb) => ipcRenderer.on('vault:status', (_e, data) => cb(data)),
+  onVaultLocked: (cb) => ipcRenderer.on('vault:locked', cb),
 
   // Browser-Import (Lesezeichen, Passwörter, Verlauf aus installierten Browsern)
   browserImport: {

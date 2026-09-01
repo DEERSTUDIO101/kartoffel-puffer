@@ -3,6 +3,9 @@ const path   = require('path');
 const fs     = require('fs');
 const { autoUpdater } = require('electron-updater');
 const vault  = require('./vault.js');
+let manuallyLocked  = false;
+let _unlockAttempts = 0;
+let _unlockCooldown = 0;  // timestamp ms until cooldown expires
 const { ElectronBlocker } = require('@ghostery/adblocker-electron');
 const fetch  = require('cross-fetch');
 const browserImport = require('./js/browser-import.js');
@@ -440,6 +443,18 @@ function createMainWindow() {
     }
   });
   mainWin.loadFile(path.join(__dirname, 'index.html'));
+  mainWin.webContents.on('did-finish-load', async () => {
+    // Startup auto-unlock: only if not manually locked this session
+    if (!manuallyLocked && vault.isSetup() && vault.isAutoUnlockEnabled()) {
+      await vault.tryAutoUnlock();
+    }
+    mainWin.webContents.send('vault:status', {
+      isSetup:             vault.isSetup(),
+      isLocked:            vault.isLocked(),
+      autoUnlockAvailable: require('electron').safeStorage.isEncryptionAvailable(),
+      isAutoUnlockEnabled: vault.isAutoUnlockEnabled(),
+    });
+  });
   mainWin.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
   mainWin.on('closed', () => {
     mainWin = null;
@@ -499,6 +514,9 @@ app.whenReady().then(async () => {
   loadDownloadsHistory(userData);
   setupDownloads(kpSession);
   vault.init(userData);
+  vault.onAutoLock(() => {
+    mainWin?.webContents.send('vault:locked');
+  });
   extInit(userData);
   permInit(userData);
   setupPermissions(kpSession);
@@ -599,12 +617,38 @@ ipcMain.handle('clipboard:read',  ()          => clipboard.readText());
 ipcMain.handle('passwords:isSetup',  () => vault.isSetup());
 ipcMain.handle('passwords:isLocked', () => vault.isLocked());
 ipcMain.handle('passwords:setup',    (_e, pw) => vault.setup(pw));
-ipcMain.handle('passwords:unlock',   (_e, pw) => vault.unlock(pw));
-ipcMain.handle('passwords:lock',     () => vault.lock());
+ipcMain.handle('passwords:unlock', async (_e, pw) => {
+  if (Date.now() < _unlockCooldown) {
+    const sec = Math.ceil((_unlockCooldown - Date.now()) / 1000);
+    throw new Error(`Zu viele Versuche. Bitte warte ${sec} Sekunden.`);
+  }
+  try {
+    const result  = await vault.unlock(pw);
+    _unlockAttempts = 0;
+    manuallyLocked  = false;
+    return result;
+  } catch (err) {
+    if (++_unlockAttempts >= 5) {
+      _unlockCooldown  = Date.now() + 30_000;
+      _unlockAttempts  = 0;
+    }
+    throw err;
+  }
+});
+ipcMain.handle('passwords:lock', () => {
+  manuallyLocked = true;
+  return vault.lock();
+});
 ipcMain.handle('passwords:list',     () => vault.list());
 ipcMain.handle('passwords:save',     (_e, entry) => vault.save(entry));
 ipcMain.handle('passwords:get',      (_e, site) => vault.get(site));
 ipcMain.handle('passwords:delete',   (_e, site, username) => vault.remove(site, username));
+ipcMain.handle('passwords:tryAutoUnlock',     () => vault.tryAutoUnlock());
+ipcMain.handle('passwords:setupAutoUnlock',   () => vault.setupAutoUnlock());
+ipcMain.handle('passwords:disableAutoUnlock', () => vault.disableAutoUnlock());
+ipcMain.handle('passwords:autoUnlockAvailable', () =>
+  require('electron').safeStorage.isEncryptionAvailable());
+ipcMain.handle('passwords:isAutoUnlockEnabled', () => vault.isAutoUnlockEnabled());
 
 // ── IPC: shell ────────────────────────────────────────────────────────────────
 ipcMain.handle('shell:openExternal', (_e, url) => shell.openExternal(url));
