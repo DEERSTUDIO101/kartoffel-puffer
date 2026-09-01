@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, session, clipboard, dialog, webContents, net, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, clipboard, dialog, webContents, net, nativeImage, safeStorage } = require('electron');
 const path   = require('path');
 const fs     = require('fs');
 const { autoUpdater } = require('electron-updater');
@@ -446,12 +446,12 @@ function createMainWindow() {
   mainWin.webContents.on('did-finish-load', async () => {
     // Startup auto-unlock: only if not manually locked this session
     if (!manuallyLocked && vault.isSetup() && vault.isAutoUnlockEnabled()) {
-      await vault.tryAutoUnlock();
+      try { await vault.tryAutoUnlock(); } catch (_) {}
     }
     mainWin.webContents.send('vault:status', {
       isSetup:             vault.isSetup(),
       isLocked:            vault.isLocked(),
-      autoUnlockAvailable: require('electron').safeStorage.isEncryptionAvailable(),
+      autoUnlockAvailable: safeStorage.isEncryptionAvailable(),
       isAutoUnlockEnabled: vault.isAutoUnlockEnabled(),
     });
   });
@@ -647,7 +647,7 @@ ipcMain.handle('passwords:tryAutoUnlock',     () => vault.tryAutoUnlock());
 ipcMain.handle('passwords:setupAutoUnlock',   () => vault.setupAutoUnlock());
 ipcMain.handle('passwords:disableAutoUnlock', () => vault.disableAutoUnlock());
 ipcMain.handle('passwords:autoUnlockAvailable', () =>
-  require('electron').safeStorage.isEncryptionAvailable());
+  safeStorage.isEncryptionAvailable());
 ipcMain.handle('passwords:isAutoUnlockEnabled', () => vault.isAutoUnlockEnabled());
 
 // ── IPC: shell ────────────────────────────────────────────────────────────────
