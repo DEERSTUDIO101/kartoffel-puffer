@@ -57,6 +57,14 @@ webview.active{visibility:visible;pointer-events:auto}
 .tab[data-group-color]{background-color:color-mix(in srgb,var(--group-color) 20%,rgba(255,255,255,0.04));border-top:2px solid var(--group-color)}
 .tab[data-group-color].active{background-color:color-mix(in srgb,var(--group-color) 30%,rgba(255,255,255,0.11))}
 .tab-group-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-right:1px}
+.ts-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px; cursor: pointer; transition: background .1s;
+}
+.ts-item:hover, .ts-item.selected { background: rgba(255,255,255,.07); }
+.ts-item.selected { background: rgba(255,255,255,.1); }
+.ts-title { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ts-url   { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tab-favicon{width:14px;height:14px;object-fit:contain}
 #newTabBtn{flex-shrink:0;width:26px;height:26px;border:none;border-radius:6px;background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center;font-size:18px;line-height:1;margin-left:2px;align-self:flex-end;transition:background .12s,color .12s}
 #newTabBtn:hover{background:rgba(255,255,255,0.08);color:var(--text)}
@@ -697,6 +705,19 @@ body:not(.feat--browserImport) #btnRestartWizard { display: none !important; }
   <div class="pp-actions">
     <button class="s-btn" id="permDeny">Blockieren</button>
     <button class="s-btn primary" id="permAllow">Erlauben</button>
+  </div>
+</div>
+
+<!-- ── Tab-Suche Overlay ── -->
+<div id="tabSearch" style="display:none;position:fixed;inset:0;z-index:99998;align-items:flex-start;justify-content:center;padding-top:80px;background:rgba(0,0,0,.45);backdrop-filter:blur(4px)">
+  <div style="width:min(600px,92vw);background:var(--panel);border:1px solid var(--panel-border);border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6)">
+    <div style="display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--panel-border)">
+      <i data-lucide="search" width="15" height="15" style="color:var(--muted);flex-shrink:0"></i>
+      <input id="tabSearchInput" placeholder="Tab suchen …" autocomplete="off" spellcheck="false"
+        style="flex:1;background:none;border:none;outline:none;color:var(--text);font-size:14px;font-family:inherit"/>
+      <span style="font-size:11px;color:var(--muted)">Esc zum Schließen</span>
+    </div>
+    <div id="tabSearchList" style="max-height:380px;overflow-y:auto"></div>
   </div>
 </div>
 
@@ -2144,6 +2165,82 @@ function buildUrlSuggestions(query) {
 document.getElementById('urlbar')?.addEventListener('input', e => buildUrlSuggestions(e.target.value));
 document.getElementById('urlbar')?.addEventListener('blur', () => {
   setTimeout(() => { const box = document.getElementById('urlSuggestions'); if (box) box.style.display = 'none'; }, 150);
+});
+
+// ── TAB-SUCHE ─────────────────────────────────────────────────────────────────
+let _tsSelected = 0;
+let _tsFiltered = [];
+
+function openTabSearch() {
+  const overlay = document.getElementById('tabSearch');
+  overlay.style.display = 'flex';
+  const input = document.getElementById('tabSearchInput');
+  input.value = '';
+  _tsSelected = 0;
+  renderTabSearchList('');
+  setTimeout(() => input.focus(), 30);
+}
+
+function closeTabSearch() {
+  document.getElementById('tabSearch').style.display = 'none';
+}
+
+function renderTabSearchList(query) {
+  const list = document.getElementById('tabSearchList');
+  const q = query.toLowerCase();
+  _tsFiltered = q
+    ? tabs.filter(t => !t.isNewTab && ((t.title||'').toLowerCase().includes(q) || (t.url||'').toLowerCase().includes(q)))
+    : tabs.filter(t => !t.isNewTab);
+  if (!_tsFiltered.length && !q) _tsFiltered = tabs; // alle anzeigen wenn keine Query
+
+  if (!_tsFiltered.length) {
+    list.innerHTML = '<div style="padding:1.5rem;text-align:center;color:var(--muted);font-size:13px">Keine Tabs gefunden.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  _tsFiltered.forEach((t, i) => {
+    const group = t.groupId ? groups.find(g => g.id === t.groupId) : null;
+    const dotHtml = group ? `<span style="width:7px;height:7px;border-radius:50%;background:${escHtml(group.color)};flex-shrink:0"></span>` : '';
+    const safeIcon = t.favicon ? safeFaviconUrl(t.favicon) : null;
+    const iconHtml = safeIcon ? `<img src="${escHtml(safeIcon)}" style="width:14px;height:14px;object-fit:contain;flex-shrink:0">` : `<i data-lucide="globe" width="14" height="14" style="flex-shrink:0;color:var(--muted)"></i>`;
+    const item = document.createElement('div');
+    item.className = 'ts-item' + (i === _tsSelected ? ' selected' : '');
+    item.innerHTML = `${iconHtml}${dotHtml}<div style="flex:1;min-width:0"><div class="ts-title">${escHtml(t.title||t.url)}</div><div class="ts-url">${escHtml(t.url)}</div></div>`;
+    item.addEventListener('click', () => { activateTab(t.id); closeTabSearch(); });
+    list.appendChild(item);
+  });
+  renderLucide();
+}
+
+function tabSearchScrollSelected() {
+  const items = document.querySelectorAll('.ts-item');
+  if (items[_tsSelected]) items[_tsSelected].scrollIntoView({ block: 'nearest' });
+}
+
+document.getElementById('tabSearchInput')?.addEventListener('input', e => {
+  _tsSelected = 0;
+  renderTabSearchList(e.target.value);
+});
+document.getElementById('tabSearchInput')?.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    _tsSelected = Math.min(_tsSelected + 1, _tsFiltered.length - 1);
+    document.querySelectorAll('.ts-item').forEach((el, i) => el.classList.toggle('selected', i === _tsSelected));
+    tabSearchScrollSelected();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _tsSelected = Math.max(_tsSelected - 1, 0);
+    document.querySelectorAll('.ts-item').forEach((el, i) => el.classList.toggle('selected', i === _tsSelected));
+    tabSearchScrollSelected();
+  } else if (e.key === 'Enter') {
+    const t = _tsFiltered[_tsSelected];
+    if (t) { activateTab(t.id); closeTabSearch(); }
+  } else if (e.key === 'Escape') {
+    closeTabSearch();
+  }
+});
+document.getElementById('tabSearch')?.addEventListener('mousedown', e => {
+  if (e.target === document.getElementById('tabSearch')) closeTabSearch();
 });
 
 // ── INIT ──────────────────────────────────────────────────────────────────────

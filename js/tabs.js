@@ -730,6 +730,7 @@ function handleShortcut(e) {
   if (ctrl && key === ',') { openSettings(); return true; }
   // Seite durchsuchen
   if (ctrl && key === 'f') { openFindBar(); return true; }
+  if (ctrl && shift && key === 'a') { openTabSearch(); return true; }
   // Zoom: '+' liegt je nach Layout auf verschiedenen Tasten, daher mehrere Namen
   if (ctrl && (key === '+' || key === '=' || key === 'add'))      { changeZoom(+1); return true; }
   if (ctrl && (key === '-' || key === '_' || key === 'subtract')) { changeZoom(-1); return true; }
