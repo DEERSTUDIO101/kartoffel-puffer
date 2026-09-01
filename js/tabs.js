@@ -530,9 +530,15 @@ function renderTabBar() {
     el.className = 'tab' + (t.id === activeTabId ? ' active' : '') + (t.incognito ? ' incognito' : '');
     el.title = t.title || t.url;
     el.dataset.title = t.title || t.url;
+    const group = t.groupId ? groups.find(g => g.id === t.groupId) : null;
+    if (group) {
+      el.dataset.groupColor = group.color;
+      el.style.setProperty('--group-color', group.color);
+    }
     const safeTabIcon = t.favicon ? safeFaviconUrl(t.favicon) : null;
     const iconHtml = t.incognito ? `<i data-lucide="glasses" width="14" height="14"></i>` : (safeTabIcon ? `<img src="${escHtml(safeTabIcon)}" class="tab-favicon">` : `<i data-lucide="${t.isNewTab?'file-plus':'globe'}" width="14" height="14"></i>`);
-    el.innerHTML = `<span class="tab-icon-wrap">${iconHtml}</span><span class="tab-title">${escHtml(t.title)}</span><span class="close-tab"><i data-lucide="x" width="12" height="12"></i></span>`;
+    const dotHtml = group ? `<span class="tab-group-dot" style="background:${escHtml(group.color)}"></span>` : '';
+    el.innerHTML = `<span class="tab-icon-wrap">${iconHtml}</span>${dotHtml}<span class="tab-title">${escHtml(t.title)}</span><span class="close-tab"><i data-lucide="x" width="12" height="12"></i></span>`;
     el.addEventListener('click', e => { e.target.closest('.close-tab') ? closeTab(t.id) : activateTab(t.id); });
     el.addEventListener('contextmenu', e => {
       e.preventDefault();
