@@ -520,6 +520,37 @@ function closeTab(id) {
   saveSessionTabs();
 }
 
+function generateGroupId() { return 'g' + Date.now().toString(36); }
+
+function createGroup(name, color) {
+  const g = { id: generateGroupId(), name, color };
+  groups.push(g);
+  saveGroups(groups);
+  return g;
+}
+
+function addTabToGroup(tab, groupId) {
+  tab.groupId = groupId;
+  saveSessionTabs();
+  renderTabBar();
+}
+
+function removeTabFromGroup(tab) {
+  tab.groupId = null;
+  saveSessionTabs();
+  renderTabBar();
+}
+
+function renameGroup(groupId, newName) {
+  const g = groups.find(g => g.id === groupId);
+  if (g) { g.name = newName; saveGroups(groups); renderTabBar(); }
+}
+
+function closeGroupTabs(groupId) {
+  const toClose = tabs.filter(t => t.groupId === groupId).map(t => t.id);
+  toClose.forEach(id => closeTab(id));
+}
+
 function renderTabBar() {
   const bar = document.getElementById('tabBar');
   const newBtn = document.getElementById('newTabBtn');
@@ -542,12 +573,46 @@ function renderTabBar() {
     el.addEventListener('click', e => { e.target.closest('.close-tab') ? closeTab(t.id) : activateTab(t.id); });
     el.addEventListener('contextmenu', e => {
       e.preventDefault();
-      showCtxMenu([
-        { label:'Tab neu laden',    click: () => { if(t.webviewEl) t.webviewEl.reload(); } },
-        { label:'Tab duplizieren',  click: () => createTab(t.url) },
+      const group = t.groupId ? groups.find(g => g.id === t.groupId) : null;
+
+      // Gruppen-Untermenü: bestehende Gruppen + "Neue Gruppe…"
+      const groupSubmenu = [
+        ...groups.map(g => ({
+          label: `⬤ ${g.name}`,
+          click: () => addTabToGroup(t, g.id),
+        })),
+        ...(groups.length ? ['-'] : []),
+        { label: '＋ Neue Gruppe…', click: () => {
+          const name = prompt('Gruppenname:', 'Neue Gruppe');
+          if (!name) return;
+          const color = GROUP_COLORS[groups.length % GROUP_COLORS.length];
+          const g = createGroup(name, color);
+          addTabToGroup(t, g.id);
+        }},
+      ];
+
+      const items = [
+        { label: 'Tab neu laden',   click: () => { if (t.webviewEl) t.webviewEl.reload(); } },
+        { label: 'Tab duplizieren', click: () => createTab(t.url) },
         '-',
-        { label:'Tab schließen',    click: () => closeTab(t.id), danger: true },
-      ], e.clientX, e.clientY);
+        { label: 'Zu Gruppe hinzufügen', submenu: groupSubmenu },
+        ...(group ? [
+          { label: `Aus Gruppe "${group.name}" entfernen`, click: () => removeTabFromGroup(t) },
+          { label: `Gruppe umbenennen…`, click: () => {
+            const name = prompt('Neuer Name:', group.name);
+            if (name) renameGroup(group.id, name);
+          }},
+          { label: `Gruppe Farbe ändern`, submenu: GROUP_COLORS.map(c => ({
+            label: `⬤ ${c}`,
+            click: () => { group.color = c; saveGroups(groups); renderTabBar(); }
+          }))},
+          '-',
+          { label: `Alle Tabs dieser Gruppe schließen`, danger: true, click: () => closeGroupTabs(group.id) },
+        ] : []),
+        '-',
+        { label: 'Tab schließen', click: () => closeTab(t.id), danger: true },
+      ];
+      showCtxMenu(items, e.clientX, e.clientY);
     });
     bar.appendChild(el);
   });
