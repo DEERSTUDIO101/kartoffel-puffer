@@ -45,6 +45,14 @@ let unlockedKey = null;
 let idleTimer   = null;
 let _onLockCallback = null;
 
+function _autoUnlockPath() {
+  return path.join(dataDir, 'auto-unlock.dat');
+}
+
+function _getSafeStorage() {
+  return require('electron').safeStorage;
+}
+
 // ── Hilfsfunktionen ───────────────────────────────────────────────────────────
 
 function _ensureInit() {
@@ -437,8 +445,80 @@ function onAutoLock(cb) {
   _onLockCallback = cb;
 }
 
+/**
+ * Gibt an, ob Auto-Unlock aktiviert ist (auto-unlock.dat existiert).
+ */
+function isAutoUnlockEnabled() {
+  _ensureInit();
+  return fs.existsSync(_autoUnlockPath());
+}
+
+/**
+ * Versucht, den Vault automatisch mittels DPAPI (electron.safeStorage) zu entsperren.
+ * Entschlüsselt auto-unlock.dat, verifiziert via AES-GCM, setzt unlockedKey.
+ * Bei Fehler: auto-unlock.dat wird gelöscht, gibt { ok: false } zurück.
+ */
+function tryAutoUnlock() {
+  _ensureInit();
+  const autoPath = _autoUnlockPath();
+  if (!fs.existsSync(autoPath)) return Promise.resolve({ ok: false });
+
+  try {
+    const ss = _getSafeStorage();
+    if (!ss.isEncryptionAvailable()) return Promise.resolve({ ok: false });
+
+    const encrypted = fs.readFileSync(autoPath, 'utf8');
+    const hex       = ss.decryptString(encrypted);
+    const key       = Buffer.from(hex, 'hex');
+    if (key.length !== 32) throw new Error('Invalid key length');
+
+    // AES-GCM verification — only set unlocked AFTER this passes
+    if (fs.existsSync(vaultPath)) {
+      const buf = fs.readFileSync(vaultPath);
+      _aesDecrypt(key, buf); // throws if key is wrong
+    }
+
+    unlockedKey = key;
+    _touch();
+    return Promise.resolve({ ok: true });
+  } catch {
+    // Corrupted or wrong — delete auto-unlock.dat, fall back to master password
+    try { fs.unlinkSync(_autoUnlockPath()); } catch {}
+    return Promise.resolve({ ok: false });
+  }
+}
+
+/**
+ * Richtet Auto-Unlock ein: Verschlüsselt den aktuellen unlockedKey via DPAPI
+ * und speichert ihn in auto-unlock.dat.
+ */
+function setupAutoUnlock() {
+  _ensureInit();
+  if (isLocked()) return Promise.reject(new Error('Vault ist gesperrt'));
+
+  const ss = _getSafeStorage();
+  if (!ss.isEncryptionAvailable()) {
+    return Promise.reject(new Error('safeStorage nicht verfügbar'));
+  }
+
+  const hex       = unlockedKey.toString('hex');
+  const encrypted = ss.encryptString(hex);
+  fs.writeFileSync(_autoUnlockPath(), encrypted, 'utf8');
+  return Promise.resolve({ ok: true });
+}
+
+/**
+ * Deaktiviert Auto-Unlock: Löscht auto-unlock.dat.
+ */
+function disableAutoUnlock() {
+  _ensureInit();
+  try { fs.unlinkSync(_autoUnlockPath()); } catch {}
+  return Promise.resolve({ ok: true });
+}
+
 module.exports = {
   init, isSetup, isLocked, setup, unlock, lock, changePassword,
   list, save, get, getPassword, remove,
   onAutoLock,
+  tryAutoUnlock, setupAutoUnlock, disableAutoUnlock, isAutoUnlockEnabled,
 };
