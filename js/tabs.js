@@ -614,6 +614,38 @@ function renderTabBar() {
       ];
       showCtxMenu(items, e.clientX, e.clientY);
     });
+    el.draggable = true;
+    el.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/tab-id', String(t.id));
+      e.dataTransfer.effectAllowed = 'move';
+      el.style.opacity = '0.5';
+    });
+    el.addEventListener('dragend', () => { el.style.opacity = ''; });
+    el.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      el.style.outline = '2px solid var(--accent)';
+    });
+    el.addEventListener('dragleave', () => { el.style.outline = ''; });
+    el.addEventListener('drop', e => {
+      e.preventDefault();
+      el.style.outline = '';
+      const draggedId = +e.dataTransfer.getData('text/tab-id');
+      if (!draggedId || draggedId === t.id) return;
+      const dragged = tabs.find(tab => tab.id === draggedId);
+      if (!dragged) return;
+
+      if (t.groupId) {
+        // Ziel ist in einer Gruppe → gezogener Tab kommt rein
+        addTabToGroup(dragged, t.groupId);
+      } else {
+        // Beide ohne Gruppe → neue Gruppe erstellen
+        const color = GROUP_COLORS[groups.length % GROUP_COLORS.length];
+        const g = createGroup('Gruppe', color);
+        addTabToGroup(t, g.id);
+        addTabToGroup(dragged, g.id);
+      }
+    });
     bar.appendChild(el);
   });
   bar.appendChild(newBtn);
