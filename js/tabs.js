@@ -1,5 +1,7 @@
 // ── TABS ──────────────────────────────────────────────────────────────────────
 let tabs = [], activeTabId = null, tabIdCounter = 0;
+let groups = [];
+const GROUP_COLORS = ['#4f8ef7','#22c55e','#ef4444','#f97316','#a855f7','#ec4899','#06b6d4','#eab308'];
 
 // Eigener kosmetischer Ad-Ausblender: uBlocks eigenes Content-Script läuft in einer
 // isolierten Welt, auf die wir vom Host aus keinen Zugriff haben (Electron unterstützt
@@ -433,8 +435,8 @@ let _saveSessionTimer = null;
 function saveSessionTabs() {
   clearTimeout(_saveSessionTimer);
   _saveSessionTimer = setTimeout(() => {
-    const urls = tabs.filter(t => !t.incognito && !t.isNewTab && t.url).map(t => t.url);
-    localStorage.setItem(SESSION_KEY, JSON.stringify(urls));
+    const activeIdx = tabs.findIndex(t => t.id === activeTabId);
+    saveSession(tabs, groups, Math.max(0, activeIdx));
   }, 400);
 }
 
@@ -462,7 +464,7 @@ function createTab(url, incognito) {
   }
 
   const cachedFav = isNewTab ? null : faviconCacheGet(url);
-  const tab = { id, url: isNewTab ? 'newtab' : url, title: isNewTab ? 'Neuer Tab' : (url||'Neuer Tab'), favicon: cachedFav, isNewTab, webviewEl, newtabEl, incognito: !!incognito };
+  const tab = { id, url: isNewTab ? 'newtab' : url, title: isNewTab ? 'Neuer Tab' : (url||'Neuer Tab'), favicon: cachedFav, isNewTab, webviewEl, newtabEl, incognito: !!incognito, groupId: null };
   tabs.push(tab);
   activateTab(id);
   renderTabBar();

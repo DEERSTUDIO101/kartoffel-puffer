@@ -2161,9 +2161,24 @@ document.addEventListener('mousedown', e => {
   if (panel.classList.contains('open') && !panel.contains(e.target)) panel.classList.remove('open');
 }, true);
 
-const _restoredUrls = cfg.restoreSession ? loadSessionTabs() : [];
-if (_restoredUrls.length) { _restoredUrls.forEach(u => createTab(u)); }
-else { createTab('newtab'); }
+if (cfg.restoreSession) {
+  const session = loadSession();
+  groups = session.groups || [];
+  saveGroups(groups);
+  if (session.tabs.length) {
+    session.tabs.forEach(t => {
+      const tab = createTab(t.url);
+      tab.groupId = t.groupId || null;
+      if (t.title && t.title !== t.url) tab.title = t.title;
+    });
+    const restoreIdx = Math.min(session.activeIndex, tabs.length - 1);
+    if (restoreIdx >= 0) activateTab(tabs[restoreIdx].id);
+  } else {
+    createTab('newtab');
+  }
+} else {
+  createTab('newtab');
+}
 
 // ── SETUP-WIZARD ──────────────────────────────────────────────────────────────
 let _wizStep = 0;
