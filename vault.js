@@ -474,7 +474,8 @@ function tryAutoUnlock() {
 
     // AES-GCM verification — only set unlocked AFTER this passes
     if (!fs.existsSync(vaultPath)) {
-      return { ok: false };
+      try { fs.unlinkSync(_autoUnlockPath()); } catch {}
+      return Promise.resolve({ ok: false });
     }
     const buf = fs.readFileSync(vaultPath);
     _aesDecrypt(key, buf); // throws if key is wrong
