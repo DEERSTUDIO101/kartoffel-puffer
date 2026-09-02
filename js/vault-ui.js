@@ -217,11 +217,15 @@ document.getElementById('pwDupOverwrite')?.addEventListener('click', async () =>
   const user = document.getElementById('pwAddUser').value.trim();
   const pass = document.getElementById('pwAddPass').value;
   if (!site || !user || !pass) return showToast('Seite, Benutzername und Passwort benötigt!');
-  await vault.save({ site, username: user, password: pass });
-  _resetAddForm();
-  showToast('Überschrieben!');
-  switchPwTab('list');
-  await renderPwList();
+  try {
+    await vault.save({ site, username: user, password: pass });
+    _resetAddForm();
+    showToast('Überschrieben!');
+    switchPwTab('list');
+    await renderPwList();
+  } catch (err) {
+    showToast('Fehler beim Speichern: ' + (err.message || 'Unbekannt'));
+  }
 });
 
 document.getElementById('pwSearch')?.addEventListener('input', renderPwList);
