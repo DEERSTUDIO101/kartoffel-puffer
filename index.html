@@ -2543,14 +2543,18 @@ document.getElementById('autoUnlockToggle')?.addEventListener('change', async e 
 });
 
 document.getElementById('vaultManualLockBtn')?.addEventListener('click', async () => {
-  await window.electronAPI.passwords.lock();
-  closeSettings?.();
-  const [isSetup, autoUnlockAvailable, isAutoUnlockEnabled] = await Promise.all([
-    window.electronAPI.passwords.isSetup(),
-    window.electronAPI.passwords.autoUnlockAvailable(),
-    window.electronAPI.passwords.isAutoUnlockEnabled(),
-  ]);
-  showVaultOverlay({ isSetup, isLocked: true, autoUnlockAvailable, isAutoUnlockEnabled });
+  try {
+    await window.electronAPI.passwords.lock();
+    closeSettings?.();
+    const [isSetup, autoUnlockAvailable, isAutoUnlockEnabled] = await Promise.all([
+      window.electronAPI.passwords.isSetup(),
+      window.electronAPI.passwords.autoUnlockAvailable(),
+      window.electronAPI.passwords.isAutoUnlockEnabled(),
+    ]);
+    showVaultOverlay({ isSetup, isLocked: true, autoUnlockAvailable, isAutoUnlockEnabled });
+  } catch (err) {
+    showToast?.('Fehler beim Sperren: ' + (err.message || 'Unbekannt'));
+  }
 });
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
