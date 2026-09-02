@@ -1067,6 +1067,31 @@ body:not(.feat--browserImport) #btnRestartWizard { display: none !important; }
             <div class="toggle-row"><div><div class="toggle-label">JavaScript aktiviert</div></div><label class="s-toggle"><input type="checkbox" id="enableJS"/><span class="s-toggle-track"></span></label></div>
             <div class="toggle-row"><div><div class="toggle-label">Bilder laden</div></div><label class="s-toggle"><input type="checkbox" id="loadImages"/><span class="s-toggle-track"></span></label></div>
           </div>
+
+          <div class="s-section" id="vaultSettingsSection">
+            <div class="s-label">🔐 Vault-Sicherheit</div>
+
+            <div class="toggle-row" id="autoUnlockRow" style="display:none">
+              <div>
+                <div class="toggle-label">Mit Windows-Konto entsperren</div>
+                <div style="font-size:.78rem;color:var(--text-muted,#7c8a9c);margin-top:.15rem">
+                  Geschützt durch Electron safeStorage. Master-Passwort wird nie gespeichert.
+                </div>
+              </div>
+              <label class="s-toggle">
+                <input type="checkbox" id="autoUnlockToggle"/>
+                <span class="s-toggle-track"></span>
+              </label>
+            </div>
+
+            <div style="margin-top:.6rem">
+              <button id="vaultManualLockBtn"
+                      style="padding:.5rem 1rem;border-radius:8px;border:1px solid rgba(239,68,68,.5);
+                             background:transparent;color:#ef4444;cursor:pointer;font-size:.85rem">
+                🔒 Vault jetzt sperren
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- About -->
@@ -1817,7 +1842,7 @@ function renderHistoryList(filter) {
 }
 
 // ── SETTINGS UI ───────────────────────────────────────────────────────────────
-function openSettings()  { syncSettingsUI(); document.getElementById('settingsOverlay').classList.add('open'); }
+function openSettings()  { syncSettingsUI(); document.getElementById('settingsOverlay').classList.add('open'); initVaultSettings(); }
 function closeSettings() { document.getElementById('settingsOverlay').classList.remove('open'); }
 
 function syncSettingsUI() {
@@ -2489,6 +2514,43 @@ window.electronAPI.onVaultLocked(async () => {
     window.electronAPI.passwords.isAutoUnlockEnabled(),
   ]);
   showVaultOverlay({ isSetup, isLocked, autoUnlockAvailable, isAutoUnlockEnabled });
+});
+
+// ── VAULT SETTINGS ───────────────────────────────────────────────────────────
+async function initVaultSettings() {
+  const available = await window.electronAPI.passwords.autoUnlockAvailable();
+  const row = document.getElementById('autoUnlockRow');
+  if (!available || !row) return;
+  row.style.display = '';
+  const enabled = await window.electronAPI.passwords.isAutoUnlockEnabled();
+  const toggle  = document.getElementById('autoUnlockToggle');
+  if (toggle) toggle.checked = enabled;
+}
+
+document.getElementById('autoUnlockToggle')?.addEventListener('change', async e => {
+  try {
+    if (e.target.checked) {
+      await window.electronAPI.passwords.setupAutoUnlock();
+      showToast('Auto-Unlock aktiviert');
+    } else {
+      await window.electronAPI.passwords.disableAutoUnlock();
+      showToast('Auto-Unlock deaktiviert');
+    }
+  } catch (err) {
+    showToast('Fehler: ' + (err.message || 'Unbekannt'));
+    e.target.checked = !e.target.checked; // revert toggle on error
+  }
+});
+
+document.getElementById('vaultManualLockBtn')?.addEventListener('click', async () => {
+  await window.electronAPI.passwords.lock();
+  closeSettings?.();
+  const [isSetup, autoUnlockAvailable, isAutoUnlockEnabled] = await Promise.all([
+    window.electronAPI.passwords.isSetup(),
+    window.electronAPI.passwords.autoUnlockAvailable(),
+    window.electronAPI.passwords.isAutoUnlockEnabled(),
+  ]);
+  showVaultOverlay({ isSetup, isLocked: true, autoUnlockAvailable, isAutoUnlockEnabled });
 });
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
