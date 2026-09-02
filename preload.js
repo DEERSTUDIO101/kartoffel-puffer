@@ -98,7 +98,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onDownloadsUpdate: (cb) => on1('downloads-update', (_e, list) => cb(list)),
   onUpdateStatus:    (cb) => on1('update-status',    (_e, data) => cb(data)),
   onVaultStatus: (cb) => ipcRenderer.on('vault:status', (_e, data) => cb(data)),
-  onVaultLocked: (cb) => ipcRenderer.on('vault:locked', cb),
+  onVaultLocked: (cb) => ipcRenderer.on('vault:locked', (_e) => cb()),
 
   // Browser-Import (Lesezeichen, Passwörter, Verlauf aus installierten Browsern)
   browserImport: {

@@ -467,16 +467,17 @@ function tryAutoUnlock() {
     const ss = _getSafeStorage();
     if (!ss.isEncryptionAvailable()) return Promise.resolve({ ok: false });
 
-    const encrypted = fs.readFileSync(autoPath, 'utf8');
+    const encrypted = fs.readFileSync(autoPath);
     const hex       = ss.decryptString(encrypted);
     const key       = Buffer.from(hex, 'hex');
     if (key.length !== 32) throw new Error('Invalid key length');
 
     // AES-GCM verification — only set unlocked AFTER this passes
-    if (fs.existsSync(vaultPath)) {
-      const buf = fs.readFileSync(vaultPath);
-      _aesDecrypt(key, buf); // throws if key is wrong
+    if (!fs.existsSync(vaultPath)) {
+      return { ok: false };
     }
+    const buf = fs.readFileSync(vaultPath);
+    _aesDecrypt(key, buf); // throws if key is wrong
 
     unlockedKey = key;
     _touch();
@@ -503,7 +504,7 @@ function setupAutoUnlock() {
 
   const hex       = unlockedKey.toString('hex');
   const encrypted = ss.encryptString(hex);
-  fs.writeFileSync(_autoUnlockPath(), encrypted, 'utf8');
+  fs.writeFileSync(_autoUnlockPath(), encrypted);
   return Promise.resolve({ ok: true });
 }
 

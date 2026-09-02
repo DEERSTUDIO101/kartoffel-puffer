@@ -448,7 +448,7 @@ function createMainWindow() {
     if (!manuallyLocked && vault.isSetup() && vault.isAutoUnlockEnabled()) {
       try { await vault.tryAutoUnlock(); } catch (_) {}
     }
-    mainWin.webContents.send('vault:status', {
+    mainWin?.webContents.send('vault:status', {
       isSetup:             vault.isSetup(),
       isLocked:            vault.isLocked(),
       autoUnlockAvailable: safeStorage.isEncryptionAvailable(),
@@ -629,8 +629,9 @@ ipcMain.handle('passwords:unlock', async (_e, pw) => {
     return result;
   } catch (err) {
     if (++_unlockAttempts >= 5) {
-      _unlockCooldown  = Date.now() + 30_000;
-      _unlockAttempts  = 0;
+      _unlockCooldown = Date.now() + 30_000;
+      _unlockAttempts = 0;
+      throw new Error('Zu viele Versuche. Bitte warte 30 Sekunden.');
     }
     throw err;
   }
@@ -643,7 +644,11 @@ ipcMain.handle('passwords:list',     () => vault.list());
 ipcMain.handle('passwords:save',     (_e, entry) => vault.save(entry));
 ipcMain.handle('passwords:get',      (_e, site) => vault.get(site));
 ipcMain.handle('passwords:delete',   (_e, site, username) => vault.remove(site, username));
-ipcMain.handle('passwords:tryAutoUnlock',     () => vault.tryAutoUnlock());
+ipcMain.handle('passwords:tryAutoUnlock', async () => {
+  const result = await vault.tryAutoUnlock();
+  if (result.ok) manuallyLocked = false;
+  return result;
+});
 ipcMain.handle('passwords:setupAutoUnlock',   () => vault.setupAutoUnlock());
 ipcMain.handle('passwords:disableAutoUnlock', () => vault.disableAutoUnlock());
 ipcMain.handle('passwords:autoUnlockAvailable', () =>
