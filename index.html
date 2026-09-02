@@ -1246,7 +1246,34 @@ body:not(.feat--browserImport) #btnRestartWizard { display: none !important; }
         </div>
         <div class="s-section">
           <div class="s-label">Passwort</div>
-          <input class="s-input" id="pwAddPass" type="password" placeholder="Passwort" style="width:100%"/>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input class="s-input" id="pwAddPass" type="password" placeholder="Passwort" style="flex:1"/>
+            <button class="s-btn" id="pwGenToggle" title="Passwort generieren">🎲</button>
+          </div>
+          <div class="vault-strength-wrap" id="pwAddStrengthWrap" style="display:none;margin-top:6px">
+            <div class="vault-strength-bar" id="pwAddStrengthBar" style="width:0%"></div>
+          </div>
+          <div class="vault-strength-lbl" id="pwAddStrengthLbl"></div>
+          <div id="pwGenPanel" style="display:none;margin-top:8px;padding:10px;background:var(--panel);border:1px solid var(--panel-border);border-radius:6px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+              <span style="font-size:12px;color:var(--muted);white-space:nowrap">Länge: <span id="pwGenLenLabel">16</span></span>
+              <input type="range" id="pwGenLen" min="8" max="64" value="16" style="flex:1"/>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;font-size:12px">
+              <label><input type="checkbox" id="pwGenUpper" checked> A–Z</label>
+              <label><input type="checkbox" id="pwGenLower" checked> a–z</label>
+              <label><input type="checkbox" id="pwGenDigits" checked> 0–9</label>
+              <label><input type="checkbox" id="pwGenSpecial"> Sonderzeichen</label>
+            </div>
+            <button class="s-btn" id="pwGenBtn" style="width:100%;margin-top:8px">Neu generieren</button>
+          </div>
+        </div>
+        <div id="pwDupWarning" style="display:none;padding:8px 10px;background:color-mix(in srgb,var(--accent,#5b9bd5) 15%,transparent);border:1px solid var(--accent,#5b9bd5);border-radius:6px;margin-bottom:8px;font-size:13px">
+          <div id="pwDupMsg" style="margin-bottom:8px"></div>
+          <div style="display:flex;gap:6px">
+            <button class="s-btn" id="pwDupCancel" style="flex:1">Abbrechen</button>
+            <button class="s-btn danger" id="pwDupOverwrite" style="flex:1">Überschreiben</button>
+          </div>
         </div>
         <button class="s-btn primary" id="pwSaveBtn" style="width:100%;padding:8px">Speichern</button>
       </div>
