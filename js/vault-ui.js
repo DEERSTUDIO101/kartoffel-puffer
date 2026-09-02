@@ -114,18 +114,31 @@ async function renderPwList() {
           <button class="s-btn danger" data-action="delete"><i data-lucide="trash-2" width="14" height="14"></i></button>
         </div>`;
       card.querySelector('[data-action="copy-user"]').addEventListener('click',()=>{navigator.clipboard.writeText(e.username);showToast('Benutzer kopiert');});
-      card.querySelector('[data-action="copy-pass"]').addEventListener('click',async()=>{const pw=await vault.getPassword(e.site,e.username);if(pw){navigator.clipboard.writeText(pw);showToast('Passwort kopiert');}});
+      card.querySelector('[data-action="copy-pass"]').addEventListener('click', async () => {
+        try {
+          const pw = await vault.getPassword(e.site, e.username);
+          if (pw) { navigator.clipboard.writeText(pw); showToast('Passwort kopiert'); }
+        } catch { showToast('Tresor gesperrt – bitte entsperren'); }
+      });
       card.querySelector('[data-action="show-pass"]').addEventListener('click', async function() {
         const revEl = card.querySelector('.pw-revealed');
         if (revEl.style.display !== 'none') { revEl.style.display='none'; revEl.textContent=''; return; }
-        const pw = await vault.getPassword(e.site, e.username);
-        if (!pw) return;
-        revEl.textContent = pw;
-        revEl.style.display = 'block';
-        setTimeout(() => { revEl.style.display='none'; revEl.textContent=''; }, 3000);
+        try {
+          const pw = await vault.getPassword(e.site, e.username);
+          if (!pw) return;
+          revEl.textContent = pw;
+          revEl.style.display = 'block';
+          setTimeout(() => { revEl.style.display='none'; revEl.textContent=''; }, 3000);
+        } catch { showToast('Tresor gesperrt – bitte entsperren'); }
       });
       card.querySelector('[data-action="edit"]').addEventListener('click',()=>editEntry(e.site,e.username));
-      card.querySelector('[data-action="delete"]').addEventListener('click',async()=>{await vault.remove(e.site,e.username);showToast('Eintrag gelöscht');await renderPwList();});
+      card.querySelector('[data-action="delete"]').addEventListener('click', async () => {
+        try {
+          await vault.remove(e.site, e.username);
+          showToast('Eintrag gelöscht');
+          await renderPwList();
+        } catch { showToast('Tresor gesperrt – bitte entsperren'); }
+      });
       list.appendChild(card);
     });
     renderLucide();
@@ -136,12 +149,12 @@ async function _doSave() {
   const site = document.getElementById('pwAddSite').value.trim();
   const user = document.getElementById('pwAddUser').value.trim();
   const pass = document.getElementById('pwAddPass').value;
-  if (!site || !pass) return showToast('Seite und Passwort benötigt!');
+  if (!site || !user || !pass) return showToast('Seite, Benutzername und Passwort benötigt!');
 
   // Duplicate check — skip in edit mode
   if (!_editMode) {
-    const existing = await vault.get(site);
-    if (existing && existing.username === (user || '')) {
+    const existingPw = await vault.getPassword(site, user);
+    if (existingPw !== null) {
       const msg = document.getElementById('pwDupMsg');
       if (msg) msg.textContent = `Eintrag für „${site}" (${user || '–'}) existiert bereits. Überschreiben?`;
       document.getElementById('pwDupWarning').style.display = 'block';
@@ -149,12 +162,18 @@ async function _doSave() {
     }
   }
 
-  await vault.save({ site, username: user, password: pass });
-  _resetAddForm();
-  showToast(_editMode ? 'Aktualisiert!' : 'Gespeichert!');
-  _editMode = false;
-  switchPwTab('list');
-  await renderPwList();
+  const wasEditMode = _editMode;
+  try {
+    await vault.save({ site, username: user, password: pass });
+    _resetAddForm();
+    showToast(wasEditMode ? 'Aktualisiert!' : 'Gespeichert!');
+    switchPwTab('list');
+    await renderPwList();
+  } catch (err) {
+    showToast('Fehler beim Speichern: ' + (err.message || 'Unbekannt'));
+  } finally {
+    _editMode = false;
+  }
 }
 
 function _resetAddForm() {
@@ -170,6 +189,7 @@ function _resetAddForm() {
 }
 
 async function editEntry(site, username) {
+  _resetAddForm();
   _editMode = true;
   switchPwTab('add');
   document.getElementById('pwAddSite').value = site;
@@ -191,10 +211,12 @@ document.getElementById('pwDupCancel')?.addEventListener('click', () => {
 });
 
 document.getElementById('pwDupOverwrite')?.addEventListener('click', async () => {
+  _editMode = false;
   document.getElementById('pwDupWarning').style.display = 'none';
   const site = document.getElementById('pwAddSite').value.trim();
   const user = document.getElementById('pwAddUser').value.trim();
   const pass = document.getElementById('pwAddPass').value;
+  if (!site || !user || !pass) return showToast('Seite, Benutzername und Passwort benötigt!');
   await vault.save({ site, username: user, password: pass });
   _resetAddForm();
   showToast('Überschrieben!');
