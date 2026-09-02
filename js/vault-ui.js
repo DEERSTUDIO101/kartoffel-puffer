@@ -56,6 +56,7 @@ function closePasswords() { document.getElementById('pwOverlay').classList.remov
 
 // ── MASTER PASSWORD ───────────────────────────────────────────────────────────
 let masterPwMode = 'unlock';
+let _editMode = false;
 function showMasterPwOverlay(mode) {
   masterPwMode = mode;
   const title = document.getElementById('masterPwTitle');
@@ -103,10 +104,12 @@ async function renderPwList() {
         <div class="pw-actions">
           <button class="s-btn" data-action="copy-user">User</button>
           <button class="s-btn" data-action="copy-pass">Pass</button>
+          <button class="s-btn" data-action="edit"><i data-lucide="pencil" width="14" height="14"></i></button>
           <button class="s-btn danger" data-action="delete"><i data-lucide="trash-2" width="14" height="14"></i></button>
         </div>`;
       card.querySelector('[data-action="copy-user"]').addEventListener('click',()=>{navigator.clipboard.writeText(e.username);showToast('Benutzer kopiert');});
       card.querySelector('[data-action="copy-pass"]').addEventListener('click',async()=>{const entry=await vault.get(e.site);if(entry){navigator.clipboard.writeText(entry.password);showToast('Passwort kopiert');}});
+      card.querySelector('[data-action="edit"]').addEventListener('click',()=>editEntry(e.site,e.username));
       card.querySelector('[data-action="delete"]').addEventListener('click',async()=>{await vault.remove(e.site,e.username);showToast('Eintrag gelöscht');await renderPwList();});
       list.appendChild(card);
     });
@@ -114,19 +117,83 @@ async function renderPwList() {
   } catch { list.innerHTML='<div style="color:var(--danger);padding:10px">Fehler beim Laden.</div>'; }
 }
 
-document.getElementById('pwSaveBtn')?.addEventListener('click', async () => {
+async function _doSave() {
   const site = document.getElementById('pwAddSite').value.trim();
   const user = document.getElementById('pwAddUser').value.trim();
   const pass = document.getElementById('pwAddPass').value;
   if (!site || !pass) return showToast('Seite und Passwort benötigt!');
+
+  // Duplicate check — skip in edit mode
+  if (!_editMode) {
+    const existing = await vault.get(site);
+    if (existing && existing.username === (user || '')) {
+      const msg = document.getElementById('pwDupMsg');
+      if (msg) msg.textContent = `Eintrag für „${site}" (${user || '–'}) existiert bereits. Überschreiben?`;
+      document.getElementById('pwDupWarning').style.display = 'block';
+      return;
+    }
+  }
+
   await vault.save({ site, username: user, password: pass });
-  document.getElementById('pwAddSite').value=''; document.getElementById('pwAddUser').value=''; document.getElementById('pwAddPass').value='';
-  showToast('Gespeichert!'); switchPwTab('list'); await renderPwList();
+  _resetAddForm();
+  showToast(_editMode ? 'Aktualisiert!' : 'Gespeichert!');
+  _editMode = false;
+  switchPwTab('list');
+  await renderPwList();
+}
+
+function _resetAddForm() {
+  document.getElementById('pwAddSite').value = '';
+  document.getElementById('pwAddUser').value = '';
+  document.getElementById('pwAddPass').value = '';
+  document.getElementById('pwGenPanel').style.display = 'none';
+  document.getElementById('pwDupWarning').style.display = 'none';
+  document.getElementById('pwAddStrengthWrap').style.display = 'none';
+  document.getElementById('pwAddStrengthLbl').textContent = '';
+  const saveBtn = document.getElementById('pwSaveBtn');
+  if (saveBtn) saveBtn.textContent = 'Speichern';
+}
+
+async function editEntry(site, username) {
+  _editMode = true;
+  switchPwTab('add');
+  document.getElementById('pwAddSite').value = site;
+  document.getElementById('pwAddUser').value = username;
+  const pw = await vault.getPassword(site, username);
+  const inp = document.getElementById('pwAddPass');
+  if (inp) inp.value = pw || '';
+  _updateAddStrength();
+  const saveBtn = document.getElementById('pwSaveBtn');
+  if (saveBtn) saveBtn.textContent = 'Aktualisieren';
+  inp?.focus();
+}
+
+document.getElementById('pwSaveBtn')?.addEventListener('click', _doSave);
+
+// Duplicate warning buttons
+document.getElementById('pwDupCancel')?.addEventListener('click', () => {
+  document.getElementById('pwDupWarning').style.display = 'none';
 });
+
+document.getElementById('pwDupOverwrite')?.addEventListener('click', async () => {
+  document.getElementById('pwDupWarning').style.display = 'none';
+  const site = document.getElementById('pwAddSite').value.trim();
+  const user = document.getElementById('pwAddUser').value.trim();
+  const pass = document.getElementById('pwAddPass').value;
+  await vault.save({ site, username: user, password: pass });
+  _resetAddForm();
+  showToast('Überschrieben!');
+  switchPwTab('list');
+  await renderPwList();
+});
+
 document.getElementById('pwSearch')?.addEventListener('input', renderPwList);
 document.getElementById('closePwOverlay')?.addEventListener('click', closePasswords);
 document.getElementById('pwTabList')?.addEventListener('click', () => switchPwTab('list'));
-document.getElementById('pwTabAdd')?.addEventListener('click',  () => switchPwTab('add'));
+document.getElementById('pwTabAdd')?.addEventListener('click', () => {
+  if (_editMode) { _editMode = false; _resetAddForm(); }
+  switchPwTab('add');
+});
 document.getElementById('pwOverlay')?.addEventListener('click', e=>{if(e.target===document.getElementById('pwOverlay'))closePasswords();});
 
 document.getElementById('masterPwCancel')?.addEventListener('click', hideMasterPwOverlay);
