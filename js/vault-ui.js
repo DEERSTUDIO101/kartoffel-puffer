@@ -100,15 +100,30 @@ async function renderPwList() {
     if (!entries.length) { list.innerHTML='<div style="color:var(--muted);padding:10px">Keine Einträge gefunden.</div>'; return; }
     entries.forEach(e => {
       const card = document.createElement('div'); card.className = 'pw-item';
-      card.innerHTML=`<div class="pw-info"><div class="pw-site">${escHtml(e.site)}</div><div class="pw-user">${escHtml(e.username)}</div></div>
+      card.innerHTML=`
+        <div class="pw-info">
+          <div class="pw-site">${escHtml(e.site)}</div>
+          <div class="pw-user">${escHtml(e.username)}</div>
+          <div class="pw-revealed" style="display:none;font-size:11px;color:var(--accent,#5b9bd5);word-break:break-all;margin-top:2px;font-family:monospace"></div>
+        </div>
         <div class="pw-actions">
           <button class="s-btn" data-action="copy-user">User</button>
           <button class="s-btn" data-action="copy-pass">Pass</button>
+          <button class="s-btn" data-action="show-pass" title="Passwort anzeigen">👁</button>
           <button class="s-btn" data-action="edit"><i data-lucide="pencil" width="14" height="14"></i></button>
           <button class="s-btn danger" data-action="delete"><i data-lucide="trash-2" width="14" height="14"></i></button>
         </div>`;
       card.querySelector('[data-action="copy-user"]').addEventListener('click',()=>{navigator.clipboard.writeText(e.username);showToast('Benutzer kopiert');});
-      card.querySelector('[data-action="copy-pass"]').addEventListener('click',async()=>{const entry=await vault.get(e.site);if(entry){navigator.clipboard.writeText(entry.password);showToast('Passwort kopiert');}});
+      card.querySelector('[data-action="copy-pass"]').addEventListener('click',async()=>{const pw=await vault.getPassword(e.site,e.username);if(pw){navigator.clipboard.writeText(pw);showToast('Passwort kopiert');}});
+      card.querySelector('[data-action="show-pass"]').addEventListener('click', async function() {
+        const revEl = card.querySelector('.pw-revealed');
+        if (revEl.style.display !== 'none') { revEl.style.display='none'; revEl.textContent=''; return; }
+        const pw = await vault.getPassword(e.site, e.username);
+        if (!pw) return;
+        revEl.textContent = pw;
+        revEl.style.display = 'block';
+        setTimeout(() => { revEl.style.display='none'; revEl.textContent=''; }, 3000);
+      });
       card.querySelector('[data-action="edit"]').addEventListener('click',()=>editEntry(e.site,e.username));
       card.querySelector('[data-action="delete"]').addEventListener('click',async()=>{await vault.remove(e.site,e.username);showToast('Eintrag gelöscht');await renderPwList();});
       list.appendChild(card);
